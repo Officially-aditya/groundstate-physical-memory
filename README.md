@@ -10,10 +10,11 @@ This project is built for the **Collaborative Partner** track of the **All Thing
 
 ## Demo loop
 
-1. Start at **Overview** and select **Scan bench**.
-2. Review the semantic diff: A17 is missing, B02 is still visible, and the centrifuge is running.
+1. Start at **Overview** and use **Capture evidence** (or open **Evidence inbox**) to add a photo, a voice note, or both.
+2. Groundstate turns the capture into a dated claim and opens the **Reconcile** step: A17 is missing, B02 is still visible, and the centrifuge is running.
 3. Choose **Confirm A17** or **It’s B02** to see how clarification or correction propagates through the revision log.
 4. Use **Fast-forward 20 min** to wake the autonomous follow-up and reopen the overdue action.
+5. Open **Projects** to create a new workspace, switch contexts, and see that a new project starts with an empty evidence inbox instead of inheriting another bench’s assumptions.
 
 The browser experience is a replayable decision surface, and its public Pages build is wired to the Cloud Run runtime above. Without a photo it stays inexpensive; adding a photo or voice observation calls the live `/api/observe` endpoint.
 

@@ -24,6 +24,8 @@ Collaborative Partner
 
 Groundstate gives physical workspaces persistent memory. It observes a place over time, builds a temporal world model, compares what is happening with what should happen next, and asks for a human anchor before reconciling contradictions.
 
+The product has a real front door: operators can create and switch projects, open an evidence inbox, upload a bench photo, add an operator note, and follow a visible four-step workflow from capture to reconciliation to human approval to autonomous follow-up.
+
 ## About the project
 
 Software remembers everything that happens inside it. Physical work remembers almost nothing.
@@ -61,10 +63,11 @@ Add authenticated multi-user workspaces, use Firestore listeners for live graph 
 
 ## Demo instructions
 
-1. Open the hosted app and click **Scan bench**.
-2. Inspect the A17/B02/C-01 semantic diff.
+1. Open the hosted app and click **Capture evidence**. Add a note or upload a bench photo, then choose **Analyze evidence**.
+2. Inspect the A17/B02/C-01 semantic diff in the **Reconcile** step.
 3. Choose **Confirm A17** to seal the likely transition, or **It’s B02** to see a correction propagate.
 4. Click **Fast-forward 20 min** to trigger the autonomous follow-up.
+5. Open **Projects** to create a workspace and verify that project evidence stays scoped to its context.
 
 ## Built with
 
