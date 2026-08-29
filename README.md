@@ -47,6 +47,18 @@ The server serves the production build from `dist/` and exposes:
 - `GET /api/state` — returns the deterministic claim fixture.
 - `POST /api/observe` — accepts `voice_note`, an optional `image_data_url`, `world_state`, and `due_at`; it calls Gemini when configured, persists the claim, and schedules the follow-up.
 
+To deploy the same frontend + API container to Cloud Run after authenticating with `gcloud`, use the configured project and choose a region:
+
+```bash
+gcloud run deploy groundstate \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars GEMINI_MODEL=gemini-3.5-flash
+```
+
+Add `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and the Pub/Sub topic through Cloud Run’s secret/environment configuration. A Cloud Run deployment serves the frontend and `/api/observe` from one origin, so the UI automatically switches from replay mode to the Google-backed runtime when the health endpoint reports `google_runtime_ready: true`.
+
 ## Architecture
 
 See [`docs/architecture.svg`](docs/architecture.svg) for the system diagram.

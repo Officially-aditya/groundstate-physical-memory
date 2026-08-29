@@ -9,6 +9,8 @@ Groundstate
 - Hosted demo: https://officially-aditya.github.io/groundstate-physical-memory/
 - Source repository: https://github.com/Officially-aditya/groundstate-physical-memory
 
+The GitHub Pages URL is the cost-safe replay. The repository also includes a Cloud Run-ready container that serves the same UI and API from one origin when the Google Cloud environment variables are configured.
+
 ## Elevator pitch
 
 Git remembers code. Groundstate remembers reality.
@@ -38,7 +40,7 @@ The production runtime in `backend/runtime.py` is the live integration path:
 - **Gemini 3.5 Flash via Google GenAI SDK** receives a camera frame, operator voice note, and remembered world state, then returns a typed observation claim with confidence and contradiction status.
 - **Firestore** stores the temporal world graph: claims, evidence, revisions, and validity windows.
 - **Pub/Sub** receives expected-transition messages so the agent can wake asynchronously when a physical step should have happened.
-- The browser replay is a cost-safe deterministic fixture of the same decision surface; `POST /api/observe` automatically switches to the Google-backed path when credentials are configured.
+- The browser replay is a cost-safe deterministic fixture of the same decision surface. The Cloud Run build exposes `POST /api/observe`, which automatically switches to Gemini + Firestore + Pub/Sub when credentials are configured; without them it returns the same inspectable local claim contract.
 
 ## What we learned
 
@@ -54,7 +56,7 @@ The replay uses synthetic lab-workbench entities and experiment records: samples
 
 ## Future work
 
-Connect a real camera/audio capture session, add authenticated multi-user workspaces, use Firestore listeners for live graph updates, and run Pub/Sub consumers on Cloud Run. The primitive can extend to repair bays, kitchens, studios, and any physical environment where continuity matters.
+Add authenticated multi-user workspaces, use Firestore listeners for live graph updates, and run a Pub/Sub consumer on Cloud Run to close the wake-up loop. The primitive can extend to repair bays, kitchens, studios, and any physical environment where continuity matters.
 
 ## Demo instructions
 
