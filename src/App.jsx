@@ -93,6 +93,8 @@ function App() {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
     if (["confirmed", "overdue"].includes(state.phase) && entity.id === "A17") return { ...entity, detail: state.phase === "overdue" ? "awaiting centrifuge" : "centrifuging", tone: "lime" };
     if (state.phase === "corrected" && entity.id === "B02") return { ...entity, detail: "centrifuging", tone: "coral" };
+    if (["diff", "confirmed"].includes(state.phase) && entity.id === "C-01") return { ...entity, detail: "running", tone: "lime" };
+    if (state.phase === "corrected" && entity.id === "C-01") return { ...entity, detail: "running · B02", tone: "lime" };
     return entity;
   }), [state.phase]);
 
