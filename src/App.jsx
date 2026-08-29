@@ -3,7 +3,7 @@ import { actualInitialState, demoReducer, initialState } from "./stateMachine.js
 
 const navItems = [
   { label: "Overview", icon: "grid" },
-  { label: "Evidence inbox", icon: "inbox", count: "02" },
+  { label: "Evidence inbox", icon: "inbox" },
   { label: "Bench / 04", icon: "crosshair" },
   { label: "Revisions", icon: "git" },
   { label: "Automations", icon: "spark" },
@@ -161,10 +161,6 @@ function App() {
     window.localStorage.setItem(`groundstate-workspace-${mode}-v1`, JSON.stringify({ activeProjectId: state.activeProjectId, projects: state.projects, evidence: state.evidence }));
   }, [mode, state.activeProjectId, state.projects, state.evidence]);
 
-  useEffect(() => {
-    window.localStorage.setItem("groundstate-workspace-v1", JSON.stringify({ activeProjectId: state.activeProjectId, projects: state.projects, evidence: state.evidence }));
-  }, [state.activeProjectId, state.projects, state.evidence]);
-
   const activeEntities = useMemo(() => (isNewProject ? [] : entities).map((entity) => {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
     if (["confirmed", "overdue"].includes(state.phase) && entity.id === "A17") return { ...entity, detail: state.phase === "overdue" ? "awaiting centrifuge" : "centrifuging", tone: "lime" };
@@ -193,7 +189,7 @@ function App() {
       setRuntimeMessage(`${claim.entity_id} → ${claim.next_expected_state} · ${claim.persistence?.store || "local replay"}`);
       return claim;
     } catch {
-      setRuntimeMessage("Replay claim ready · no cloud credentials required");
+      setRuntimeMessage(mode === "demo" ? "Replay claim ready · no cloud credentials required" : "Local claim ready · cloud runtime unavailable");
       return null;
     }
   }
@@ -278,13 +274,12 @@ function App() {
           <div><div className="brand-name">groundstate</div><div className="brand-subtitle">physical memory, made legible</div></div>
         </div>
 
-        <div className="sidebar-section-label">Workspace</div>
         <nav className="primary-nav" aria-label="Primary navigation">
           {navItems.map((item) => (
             <button className={`nav-item ${activeNav === item.label ? "nav-active" : ""}`} key={item.label} aria-current={activeNav === item.label ? "page" : undefined} onClick={() => setActiveNav(item.label)}>
               <Icon name={item.icon} size={17} />
-              <span>{item.label}</span>
-              {((item.label === "Evidence inbox" && state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length > 0) || item.label === "Revisions") && <span className="nav-count">{item.label === "Evidence inbox" ? String(state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length).padStart(2, "0") : "18"}</span>}
+              <span>{item.label === "Bench / 04" && mode === "actual" ? "Current surface" : item.label}</span>
+              {((item.label === "Evidence inbox" && state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length > 0) || (item.label === "Revisions" && (mode === "demo" || activeProject.revisions > 0))) && <span className="nav-count">{item.label === "Evidence inbox" ? String(state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length).padStart(2, "0") : activeProject.revisions}</span>}
             </button>
           ))}
         </nav>
@@ -302,13 +297,13 @@ function App() {
             <div><div className="operator-name">A. Mehta</div><div className="operator-role">operator · {activeProject.location.toLowerCase()}</div></div>
             <Icon name="more" size={16} />
           </div>
-          <div className="sidebar-version"><span>{mode === "demo" ? "DEMO REPLAY" : "LIVE WORKSPACE"}</span><span>{mode === "demo" ? "fixture" : "v0.2"}</span></div>
+          <div className="sidebar-version"><span>{mode === "demo" ? "FIXTURE MODE" : "LIVE STATE"}</span><span>{mode === "demo" ? "isolated" : "v0.2"}</span></div>
         </div>
       </aside>
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
+          <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{activeNav === "Bench / 04" && mode === "actual" ? "Current surface" : currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
           <div className="topbar-actions"><span className={`runtime-chip runtime-${runtimeStatus}`}><span />{runtimeStatus === "google" ? "Cloud runtime live" : runtimeStatus === "checking" ? "Connecting" : mode === "demo" ? "Replay mode" : "Local fallback"}</span><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
@@ -354,7 +349,7 @@ function App() {
                 <div className="stage-center"><span className="center-ring" /><span className="center-label">origin<br /><strong>O4</strong></span></div>
                 <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> {activeProject.entities || 0} anchors</span></div>
               </div>
-              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />{isNewProject ? "no observation yet · ready for capture" : `last observation ${state.time} · camera + voice`}</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : "replay runtime")} · confidence <strong>{isNewProject ? "—" : state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
+              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />{isNewProject ? "no observation yet · ready for capture" : `last observation ${state.time} · camera + voice`}</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : mode === "demo" ? "replay runtime" : "local runtime")} · confidence <strong>{isNewProject ? "—" : state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
             </div>
 
             <AgentQueue state={state} project={activeProject} dispatch={dispatch} onOpenEvidence={() => setCaptureOpen(true)} />
