@@ -36,7 +36,7 @@ Groundstate is “Git for the Physical World”: a persistent memory agent for l
 
 The demo follows one small but high-stakes story. Sample A17 is washed and expected to enter the centrifuge in twenty minutes. A later scan finds A17 missing, sample B02 in the expected position, and the centrifuge running. Groundstate produces a semantic reality diff instead of a generic image caption, infers a likely transition, and asks one clarification. If the operator says “Actually, that was B02,” the agent authors a revision, retracts the wrong belief, restores A17’s timer, and updates every dependent assumption. Fast-forwarding the clock wakes the autonomous follow-up and reopens the overdue action.
 
-The web experience makes that reasoning visible: spatial memory, semantic diff, evidence bundle, revision history, procedural timeline, immutable activity log, and a collaborative agent queue. The replay is deterministic so judges can evaluate the full flow without credentials or setup.
+The web experience makes that reasoning visible: spatial memory, semantic diff, evidence bundle, revision history, procedural timeline, immutable activity log, and a collaborative agent queue. The default **Workspace** mode is the live product surface and starts clean; **Demo replay** is a separate opt-in deterministic fixture containing the A17/B02 story so judges can evaluate the full flow without credentials or setup.
 
 ## How it uses Google
 
@@ -45,7 +45,7 @@ The production runtime in `backend/runtime.py` is the live integration path:
 - **Gemini 3.5 Flash Lite via Google GenAI SDK** receives a camera frame, operator voice note, and remembered world state, then returns a typed observation claim with confidence and contradiction status.
 - **Firestore** stores the temporal world graph: claims, evidence, revisions, and validity windows.
 - **Pub/Sub** receives expected-transition messages so the agent can wake asynchronously when a physical step should have happened.
-- The browser replay is a cost-safe deterministic fixture of the same decision surface. The public UI calls Cloud Run for live observations; its `POST /api/observe` path uses Gemini 3.5 Flash Lite, Firestore, and Pub/Sub in the configured project.
+- The public UI calls Cloud Run for live observations; its `POST /api/observe` path uses Gemini 3.5 Flash Lite, Firestore, and Pub/Sub in the configured project. Demo replay is isolated from Workspace data and is only a deterministic judging fixture.
 
 ## What we learned
 
@@ -65,11 +65,13 @@ Add authenticated multi-user workspaces, use Firestore listeners for live graph 
 
 ## Demo instructions
 
-1. Open the hosted app and click **Capture evidence**. Add a note or upload a bench photo, then choose **Analyze evidence**.
+1. Open the hosted app in **Workspace** mode and click **Capture evidence**. Add a note or upload a bench photo, then choose **Analyze evidence**.
 2. Inspect the A17/B02/C-01 semantic diff in the **Reconcile** step.
 3. Choose **Confirm A17** to seal the likely transition, or **It’s B02** to see a correction propagate.
 4. Click **Fast-forward 20 min** to trigger the autonomous follow-up.
 5. Open **Projects** to create a workspace and verify that project evidence stays scoped to its context.
+
+The **Demo replay** tab is optional and isolated from live workspace data; it exists only to make the clarification/revision/wake-up story deterministic for judges.
 
 ## Built with
 

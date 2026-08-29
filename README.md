@@ -16,7 +16,7 @@ This project is built for the **Collaborative Partner** track of the **All Thing
 4. Use **Fast-forward 20 min** to wake the autonomous follow-up and reopen the overdue action.
 5. Open **Projects** to create a new workspace, switch contexts, and see that a new project starts with an empty evidence inbox instead of inheriting another bench’s assumptions.
 
-The browser experience is a replayable decision surface, and its public Pages build is wired to the Cloud Run runtime above. Without a photo it stays inexpensive; adding a photo or voice observation calls the live `/api/observe` endpoint.
+The default **Workspace** mode is the live product surface: it starts with only the operator’s projects and evidence. **Demo replay** is a separate opt-in fixture containing the synthetic A17/B02 story for a deterministic judging walkthrough. Without a photo it stays inexpensive; adding a photo or voice observation calls the live `/api/observe` endpoint.
 
 ## Google runtime
 

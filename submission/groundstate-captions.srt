@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:05,500
+Groundstate is not a code forge: it versions physical state with evidence.
+
+2
+00:00:05,500 --> 00:00:11,000
+The familiar product shell is navigation grammar. The records are camera frames, voice notes, and world claims.
+
+3
+00:00:11,000 --> 00:00:17,000
+Gemini 3.5 Flash Lite turns the observation into a typed claim with confidence and provenance.
+
+4
+00:00:17,000 --> 00:00:23,500
+The semantic diff shows what changed, what is inferred, and where the agent needs a human anchor.
+
+5
+00:00:23,500 --> 00:00:29,000
+A correction travels through dependent physical assumptions instead of silently overwriting history.
+
+6
+00:00:29,000 --> 00:00:32,900
+Workspace is live. Demo replay is isolated as a deterministic judge-safe fixture.

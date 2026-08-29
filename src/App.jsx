@@ -4,7 +4,6 @@ import { actualInitialState, demoReducer, initialState } from "./stateMachine.js
 const navItems = [
   { label: "Overview", icon: "grid" },
   { label: "Evidence inbox", icon: "inbox", count: "02" },
-  { label: "Projects", icon: "folder" },
   { label: "Bench / 04", icon: "crosshair" },
   { label: "Revisions", icon: "git" },
   { label: "Automations", icon: "spark" },
@@ -279,15 +278,6 @@ function App() {
           <div><div className="brand-name">groundstate</div><div className="brand-subtitle">physical memory, made legible</div></div>
         </div>
 
-        <div className="sidebar-project-block">
-          <div className="sidebar-section-label">Active project</div>
-          <button className="project-switcher" onClick={() => setActiveNav("Projects")} aria-label="Open project manager">
-            <span className="project-avatar">{activeProject.id === "experiment-28" ? "E28" : activeProject.name.slice(0, 3).toUpperCase()}</span>
-            <span><strong>{activeProject.name}</strong><small>{activeProject.location} · {activeProject.status}</small></span>
-            <Icon name="chevron" size={13} />
-          </button>
-          <button className="new-project-button" onClick={() => setProjectModalOpen(true)}><Icon name="plus" size={14} /> New project</button>
-        </div>
         <div className="sidebar-section-label">Workspace</div>
         <nav className="primary-nav" aria-label="Primary navigation">
           {navItems.map((item) => (
@@ -319,7 +309,7 @@ function App() {
       <main className="main-panel">
         <header className="topbar">
           <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
-          <div className="topbar-actions"><span className={`runtime-chip runtime-${runtimeStatus}`}><span />{runtimeStatus === "google" ? "Cloud runtime live" : runtimeStatus === "checking" ? "Connecting" : mode === "demo" ? "Replay mode" : "Local fallback"}</span><button className="topbar-capture" onClick={() => setCaptureOpen(true)}><Icon name="camera" size={15} /> Capture evidence</button><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
+          <div className="topbar-actions"><span className={`runtime-chip runtime-${runtimeStatus}`}><span />{runtimeStatus === "google" ? "Cloud runtime live" : runtimeStatus === "checking" ? "Connecting" : mode === "demo" ? "Replay mode" : "Local fallback"}</span><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
         <div className="content-wrap">
