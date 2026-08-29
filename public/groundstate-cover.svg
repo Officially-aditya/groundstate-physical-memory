@@ -1,0 +1,27 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#171923"/>
+  <circle cx="1320" cy="90" r="350" fill="#D6F77B" fill-opacity="0.08"/>
+  <circle cx="1420" cy="760" r="300" fill="#9AAFFF" fill-opacity="0.08"/>
+  <path d="M0 714H1600" stroke="#343747"/>
+  <path d="M0 804H1600" stroke="#343747" stroke-dasharray="4 12"/>
+  <g opacity="0.36" stroke="#6E7486">
+    <path d="M180 160H1420"/><path d="M180 250H1420"/><path d="M180 340H1420"/><path d="M180 430H1420"/><path d="M180 520H1420"/><path d="M180 610H1420"/>
+    <path d="M270 120V650"/><path d="M390 120V650"/><path d="M510 120V650"/><path d="M630 120V650"/><path d="M750 120V650"/><path d="M870 120V650"/><path d="M990 120V650"/><path d="M1110 120V650"/><path d="M1230 120V650"/><path d="M1350 120V650"/>
+  </g>
+  <path d="M390 395C550 370 620 245 805 280C970 311 1082 227 1232 178" stroke="#D6F77B" stroke-opacity="0.56" stroke-dasharray="4 11" stroke-width="3"/>
+  <path d="M390 395C570 425 641 538 838 486C1005 442 1124 540 1234 586" stroke="#9AAFFF" stroke-opacity="0.58" stroke-dasharray="4 11" stroke-width="3"/>
+  <circle cx="390" cy="395" r="16" fill="#D6F77B"/><circle cx="390" cy="395" r="31" stroke="#D6F77B" stroke-opacity="0.25"/>
+  <circle cx="805" cy="280" r="11" fill="#FF806B"/><circle cx="1232" cy="178" r="11" fill="#FFC96E"/><circle cx="1234" cy="586" r="11" fill="#9AAFFF"/>
+  <rect x="285" y="330" width="210" height="132" rx="15" fill="#202331" stroke="#596077"/>
+  <text x="316" y="370" fill="#D6F77B" font-family="monospace" font-size="18" letter-spacing="2">WORLD / 04</text>
+  <text x="316" y="412" fill="#F4F1EA" font-family="Arial, sans-serif" font-size="32" font-weight="700">A17</text>
+  <text x="316" y="440" fill="#888D9E" font-family="monospace" font-size="14">washed · rack 4</text>
+  <rect x="1018" y="116" width="260" height="130" rx="15" fill="#202331" stroke="#596077"/>
+  <text x="1051" y="157" fill="#FFC96E" font-family="monospace" font-size="16" letter-spacing="2">SEMANTIC DIFF</text>
+  <text x="1051" y="198" fill="#FF806B" font-family="monospace" font-size="20">- A17 / rack 4</text>
+  <text x="1051" y="224" fill="#D6F77B" font-family="monospace" font-size="20">+ C-01 / running</text>
+  <text x="180" y="144" fill="#8B8F9E" font-family="monospace" font-size="17" letter-spacing="4">GROUNDSTATE / PHYSICAL MEMORY</text>
+  <text x="180" y="760" fill="#F4F1EA" font-family="Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-3">Reality, under version control.</text>
+  <text x="184" y="820" fill="#A3A7B4" font-family="monospace" font-size="22" letter-spacing="1">Git remembers code. Groundstate remembers reality.</text>
+  <g transform="translate(1384 760)"><rect width="36" height="36" rx="10" fill="#D6F77B"/><path d="M11 25V16L18 11L25 16V25" stroke="#202421" stroke-width="3"/><path d="M14 25H22" stroke="#202421" stroke-width="3"/></g>
+</svg>
