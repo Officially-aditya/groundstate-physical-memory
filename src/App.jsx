@@ -295,6 +295,7 @@ function App() {
         </header>
 
         <div className="content-wrap">
+          <ProjectRepositoryBar project={activeProject} state={state} activeNav={activeNav} onNavigate={setActiveNav} onCapture={() => setCaptureOpen(true)} />
           {activeNav === "Overview" && <>
             <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
             <WorkflowPrompt phase={state.phase} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
@@ -375,6 +376,13 @@ function App() {
       </main>
     </div>
   );
+}
+
+function ProjectRepositoryBar({ project, state, activeNav, onNavigate, onCapture }) {
+  const evidenceCount = state.evidence.filter((item) => item.projectId === project?.id).length;
+  const activeTab = activeNav === "Evidence inbox" ? "Evidence" : activeNav === "Revisions" ? "Activity" : activeNav === "Automations" ? "Automations" : "Overview";
+  const tabs = [["Overview", "Overview", ""], ["Evidence", "Evidence inbox", evidenceCount ? String(evidenceCount).padStart(2, "0") : ""], ["Activity", "Revisions", project?.revisions ? String(project.revisions) : ""], ["Automations", "Automations", ""]];
+  return <section className="repository-bar"><div className="repository-bar-main"><div className="repository-identity"><span className="repository-mark">gs</span><div><div className="repository-path">workspace / groundstate</div><h2>{project?.name}</h2><div className="repository-meta"><span>{project?.location}</span><span className="repository-pill">workspace</span><span className="repository-sync"><i />{state.phase === "diff" ? "review required" : project?.entities ? "synced" : "ready"}</span></div></div></div><div className="repository-actions"><button className="repo-ghost-button" onClick={() => onNavigate("Projects")}><Icon name="folder" size={14} /> Projects</button><button className="repo-primary-button" onClick={onCapture}><Icon name="camera" size={14} /> Capture evidence</button></div></div><nav className="repository-tabs" aria-label="Project sections">{tabs.map(([label, nav, count]) => <button key={label} className={activeTab === label ? "repository-tab-active" : ""} onClick={() => onNavigate(nav)}>{label}{count && <span>{count}</span>}</button>)}</nav></section>;
 }
 
 function WorkflowHeader({ project, phase, copy, onCapture, onScan }) {
