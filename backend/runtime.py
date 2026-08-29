@@ -65,11 +65,15 @@ Remembered world: {json.dumps(world_state, sort_keys=True)}
     parts = [types.Part.from_text(text=prompt)]
     if image_bytes:
         parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_mime))
-    response = _gemini_client().models.generate_content(
-        model=MODEL,
-        contents=[types.Content(role="user", parts=parts)],
-        config=types.GenerateContentConfig(response_mime_type="application/json"),
-    )
+    client = _gemini_client()
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[types.Content(role="user", parts=parts)],
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
+    finally:
+        client.close()
     return json.loads(response.text)
 
 
