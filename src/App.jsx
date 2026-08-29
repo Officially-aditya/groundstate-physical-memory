@@ -3,6 +3,8 @@ import { demoReducer, initialState } from "./stateMachine.js";
 
 const navItems = [
   { label: "Overview", icon: "grid" },
+  { label: "Evidence inbox", icon: "inbox", count: "02" },
+  { label: "Projects", icon: "folder" },
   { label: "Bench / 04", icon: "crosshair" },
   { label: "Revisions", icon: "git" },
   { label: "Automations", icon: "spark" },
@@ -70,6 +72,10 @@ function Icon({ name, size = 18, stroke = 1.8 }) {
     chevron: <path d="m9 18 6-6-6-6" />,
     rotate: <><path d="M20 11a8 8 0 0 0-14.7-4L3 10" /><path d="M3 5v5h5" /><path d="M4 13a8 8 0 0 0 14.7 4L21 14" /><path d="M21 19v-5h-5" /></>,
     command: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M7 8h.01M11 8h6M7 12h10M7 16h5" /></>,
+    inbox: <><path d="M4 5h16v14H4z" /><path d="M4 14h4l1.5 2h5L16 14h4" /></>,
+    folder: <><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5Z" /><path d="M3 10h18" /></>,
+    camera: <><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.2-2h6.6l1.2 2h2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5Z" /><circle cx="11.5" cy="12.5" r="3.2" /><path d="M17 10h.01" /></>,
+    upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 15v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" /></>,
     database: <><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v7c0 1.66 3.13 3 7 3s7-1.34 7-3V5M5 12v7c0 1.66 3.13 3 7 3s7-1.34 7-3v-7" /></>,
     more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
     external: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" /></>,
@@ -81,8 +87,18 @@ function StatusBadge({ tone = "good", children, icon = true }) {
   return <span className={`status-badge status-${tone}`}>{icon && <span className="status-dot" />}{children}</span>;
 }
 
+function hydrateState() {
+  if (typeof window === "undefined") return initialState;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("groundstate-workspace-v1"));
+    return saved?.projects ? { ...initialState, ...saved } : initialState;
+  } catch {
+    return initialState;
+  }
+}
+
 function App() {
-  const [state, dispatch] = useReducer(demoReducer, initialState);
+  const [state, dispatch] = useReducer(demoReducer, initialState, hydrateState);
   const [activeNav, setActiveNav] = useState("Overview");
   const [command, setCommand] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
@@ -90,11 +106,21 @@ function App() {
   const [runtimeStatus, setRuntimeStatus] = useState("checking");
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const evidenceInputRef = useRef(null);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [evidenceFile, setEvidenceFile] = useState(null);
+  const [evidencePreview, setEvidencePreview] = useState("");
+  const [evidenceNote, setEvidenceNote] = useState("");
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectLocation, setNewProjectLocation] = useState("");
   const runtimeUrl = (import.meta.env.VITE_RUNTIME_URL || "").replace(/\/$/, "");
+  const activeProject = state.projects.find((project) => project.id === state.activeProjectId) ?? state.projects[0];
   const copy = phaseCopy[state.phase];
   const isDiff = ["diff", "overdue"].includes(state.phase);
-  const diffRows = getDiffRows(state.phase);
-  const currentLocation = activeNav === "Overview" ? "Bench / 04" : activeNav;
+  const isNewProject = activeProject.entities === 0;
+  const diffRows = getDiffRows(isNewProject && state.phase === "baseline" ? "new" : state.phase);
+  const currentLocation = activeNav === "Overview" ? activeProject.location : activeNav;
 
   useEffect(() => {
     const handleShortcut = (event) => {
@@ -121,14 +147,18 @@ function App() {
     return () => { cancelled = true; };
   }, [runtimeUrl]);
 
-  const activeEntities = useMemo(() => entities.map((entity) => {
+  useEffect(() => {
+    window.localStorage.setItem("groundstate-workspace-v1", JSON.stringify({ activeProjectId: state.activeProjectId, projects: state.projects, evidence: state.evidence }));
+  }, [state.activeProjectId, state.projects, state.evidence]);
+
+  const activeEntities = useMemo(() => (isNewProject ? [] : entities).map((entity) => {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
     if (["confirmed", "overdue"].includes(state.phase) && entity.id === "A17") return { ...entity, detail: state.phase === "overdue" ? "awaiting centrifuge" : "centrifuging", tone: "lime" };
     if (state.phase === "corrected" && entity.id === "B02") return { ...entity, detail: "centrifuging", tone: "coral" };
     if (["diff", "confirmed"].includes(state.phase) && entity.id === "C-01") return { ...entity, detail: "running", tone: "lime" };
     if (state.phase === "corrected" && entity.id === "C-01") return { ...entity, detail: "running · B02", tone: "lime" };
     return entity;
-  }), [state.phase]);
+  }), [isNewProject, state.phase]);
 
   function submitCommand(event) {
     event.preventDefault();
@@ -157,15 +187,59 @@ function App() {
   function handleEvidenceFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    event.target.value = "";
+    setEvidenceFile(file);
+    setCaptureOpen(true);
     const reader = new FileReader();
     reader.onload = () => {
-      void sendObservation("Bench photo attached to the current observation.", reader.result).then(() => dispatch({ type: "SCAN" }));
+      setEvidencePreview(reader.result);
     };
     reader.readAsDataURL(file);
   }
 
+  async function runCapture() {
+    if (captureBusy) return;
+    const note = evidenceNote.trim() || (evidenceFile ? "Bench photo attached to the current observation." : "Observe the current workbench and reconcile it with the project memory.");
+    setCaptureBusy(true);
+    const claim = await sendObservation(note, evidencePreview);
+    dispatch({ type: "ADD_EVIDENCE", evidence: { id: `evidence-${Date.now()}`, label: evidenceFile?.name || "Operator observation", detail: `${evidenceFile ? "photo + voice" : "voice note"} · just now`, status: "processed" } });
+    dispatch({ type: "SCAN" });
+    if (claim) dispatch({ type: "LOG_NOTE", note: `“${note}” grounded as ${claim.entity_id} → ${claim.next_expected_state}.` });
+    setCaptureBusy(false);
+    setCaptureOpen(false);
+    setActiveNav("Overview");
+    setEvidenceFile(null);
+    setEvidencePreview("");
+    setEvidenceNote("");
+  }
+
+  function closeCapture() {
+    if (captureBusy) return;
+    setCaptureOpen(false);
+    setEvidenceFile(null);
+    setEvidencePreview("");
+    setEvidenceNote("");
+  }
+
+  function createProject(event) {
+    event.preventDefault();
+    const name = newProjectName.trim();
+    if (!name) return;
+    const project = { id: `project-${Date.now()}`, name, location: newProjectLocation.trim() || "New workspace", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" };
+    dispatch({ type: "CREATE_PROJECT", project });
+    setNewProjectName("");
+    setNewProjectLocation("");
+    setProjectModalOpen(false);
+    setActiveNav("Overview");
+  }
+
+  function selectProject(projectId) {
+    dispatch({ type: "SELECT_PROJECT", projectId });
+    setActiveNav("Overview");
+  }
+
   function resetDemo() {
-    dispatch({ type: "RESET" });
+    dispatch({ type: "RESET_SNAPSHOT" });
     setActiveNav("Overview");
   }
 
@@ -177,13 +251,22 @@ function App() {
           <div><div className="brand-name">groundstate</div><div className="brand-subtitle">physical memory, made legible</div></div>
         </div>
 
+        <div className="sidebar-project-block">
+          <div className="sidebar-section-label">Active project</div>
+          <button className="project-switcher" onClick={() => setActiveNav("Projects")} aria-label="Open project manager">
+            <span className="project-avatar">{activeProject.id === "experiment-28" ? "E28" : activeProject.name.slice(0, 3).toUpperCase()}</span>
+            <span><strong>{activeProject.name}</strong><small>{activeProject.location} · {activeProject.status}</small></span>
+            <Icon name="chevron" size={13} />
+          </button>
+          <button className="new-project-button" onClick={() => setProjectModalOpen(true)}><Icon name="plus" size={14} /> New project</button>
+        </div>
         <div className="sidebar-section-label">Workspace</div>
         <nav className="primary-nav" aria-label="Primary navigation">
           {navItems.map((item) => (
             <button className={`nav-item ${activeNav === item.label ? "nav-active" : ""}`} key={item.label} aria-current={activeNav === item.label ? "page" : undefined} onClick={() => setActiveNav(item.label)}>
               <Icon name={item.icon} size={17} />
               <span>{item.label}</span>
-              {item.label === "Revisions" && <span className="nav-count">18</span>}
+              {((item.label === "Evidence inbox" && state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length > 0) || item.label === "Revisions") && <span className="nav-count">{item.label === "Evidence inbox" ? String(state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length).padStart(2, "0") : "18"}</span>}
             </button>
           ))}
         </nav>
@@ -198,7 +281,7 @@ function App() {
         <div className="sidebar-footer">
           <div className="operator-card">
             <div className="avatar">AM</div>
-            <div><div className="operator-name">A. Mehta</div><div className="operator-role">operator · bench 04</div></div>
+            <div><div className="operator-name">A. Mehta</div><div className="operator-role">operator · {activeProject.location.toLowerCase()}</div></div>
             <Icon name="more" size={16} />
           </div>
           <div className="sidebar-version"><span>DEMO REPLAY</span><span>v0.1</span></div>
@@ -207,12 +290,14 @@ function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-muted">Workspace</span><Icon name="chevron" size={13} /><span>{currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
-          <div className="topbar-actions"><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
+          <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
+          <div className="topbar-actions"><span className={`runtime-chip runtime-${runtimeStatus}`}><span />{runtimeStatus === "google" ? "Cloud runtime live" : runtimeStatus === "checking" ? "Connecting" : "Replay mode"}</span><button className="topbar-capture" onClick={() => setCaptureOpen(true)}><Icon name="camera" size={15} /> Capture evidence</button><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
-        <div className={`content-wrap ${activeNav !== "Overview" ? "content-wrap-secondary" : ""}`}>
-          {activeNav !== "Overview" && <SecondaryPage view={activeNav} state={state} dispatch={dispatch} onNavigate={setActiveNav} />}
+        <div className="content-wrap">
+          {activeNav === "Overview" && <>
+            <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
+            <WorkflowPrompt phase={state.phase} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
           <section className="hero-section">
             <div className="hero-copy">
               <div className="eyebrow"><span className="eyebrow-line" />{copy.eyebrow}</div>
@@ -226,9 +311,9 @@ function App() {
           </section>
 
           <section className="metrics-row" aria-label="Workspace metrics">
-            <Metric label="Entities tracked" value="07" delta="+2 this run" tone="lime" />
-            <Metric label="World revisions" value="18" delta="immutable log" tone="blue" />
-            <Metric label="Open assertions" value={state.phase === "diff" ? "01" : state.phase === "overdue" ? "02" : "00"} delta={state.phase === "baseline" ? "all reconciled" : "needs attention"} tone={isDiff ? "coral" : "cream"} />
+            <Metric label="Entities tracked" value={String(activeProject.entities).padStart(2, "0")} delta={isNewProject ? "waiting for evidence" : "+2 this run"} tone="lime" />
+            <Metric label="World revisions" value={String(activeProject.revisions).padStart(2, "0")} delta={isNewProject ? "first claim pending" : "immutable log"} tone="blue" />
+            <Metric label="Open assertions" value={isNewProject ? "00" : state.phase === "diff" ? "01" : state.phase === "overdue" ? "02" : "00"} delta={isNewProject ? "no claims yet" : state.phase === "baseline" ? "all reconciled" : "needs attention"} tone={isDiff ? "coral" : "cream"} />
             <Metric label="Agent uptime" value="99.8%" delta="last 30 days" tone="yellow" />
           </section>
 
@@ -239,7 +324,7 @@ function App() {
                 <div className="bench-actions"><input ref={evidenceInputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handleEvidenceFile} /><button className="ghost-button" onClick={() => evidenceInputRef.current?.click()}><Icon name="plus" size={15} /> Add photo</button><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Replay scan</button></div>
               </div>
               <div className="bench-stage">
-                <div className="stage-topline"><span>BENCH / 04</span><span className="stage-coordinate">24.592° N&nbsp;&nbsp;73.712° E <span className="coordinate-dot" /></span></div>
+                <div className="stage-topline"><span>{activeProject.location.toUpperCase()}</span><span className="stage-coordinate">24.592° N&nbsp;&nbsp;73.712° E <span className="coordinate-dot" /></span></div>
                 <div className="stage-grid" />
                 <div className="stage-glow stage-glow-one" /><div className="stage-glow stage-glow-two" />
                 <svg className="stage-connections" viewBox="0 0 700 350" preserveAspectRatio="none" aria-hidden="true"><path d="M172 183 C245 170 288 120 382 116 S504 126 568 84" /><path d="M172 183 C240 226 300 246 408 230 S506 208 580 257" /><path d="M390 116 C384 170 404 196 464 232" /></svg>
@@ -248,17 +333,17 @@ function App() {
                 <div className="surface-ruler ruler-y"><span>00</span><span>20</span><span>40</span><span>60</span></div>
                 {activeEntities.map((entity) => <EntityMarker key={entity.id} entity={entity} phase={state.phase} />)}
                 <div className="stage-center"><span className="center-ring" /><span className="center-label">origin<br /><strong>O4</strong></span></div>
-                <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> 7 anchors</span></div>
+                <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> {activeProject.entities || 0} anchors</span></div>
               </div>
-              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />last observation {state.time} · camera + voice</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : "replay runtime")} · confidence <strong>{state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
+              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />{isNewProject ? "no observation yet · ready for capture" : `last observation ${state.time} · camera + voice`}</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : "replay runtime")} · confidence <strong>{isNewProject ? "—" : state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
             </div>
 
-            <AgentQueue state={state} dispatch={dispatch} />
+            <AgentQueue state={state} project={activeProject} dispatch={dispatch} onOpenEvidence={() => setCaptureOpen(true)} />
           </section>
 
           <section className="diff-card panel-card">
             <div className="diff-heading">
-              <div><div className="panel-kicker">Semantic diff</div><h2>{state.phase === "baseline" ? "Nothing is lost between snapshots." : state.phase === "corrected" ? "Revision #18 · dependent assumptions repaired" : state.phase === "confirmed" ? "Snapshot #18 · A17 confirmed" : state.phase === "overdue" ? "Snapshot #18 · expected transition overdue" : "Snapshot #17 → #18"}</h2></div>
+              <div><div className="panel-kicker">Semantic diff</div><h2>{isNewProject ? "No snapshot yet — evidence starts the graph." : state.phase === "baseline" ? "Nothing is lost between snapshots." : state.phase === "corrected" ? "Revision #18 · dependent assumptions repaired" : state.phase === "confirmed" ? "Snapshot #18 · A17 confirmed" : state.phase === "overdue" ? "Snapshot #18 · expected transition overdue" : "Snapshot #17 → #18"}</h2></div>
               <div className="diff-heading-actions"><span className="diff-source">vision + voice + temporal graph</span><button className="icon-button icon-button-light"><Icon name="more" size={17} /></button></div>
             </div>
             <div className="diff-table">
@@ -268,8 +353,8 @@ function App() {
           </section>
 
           <section className="lower-grid">
-            <RevisionTimeline state={state} />
-            <ActivityPanel state={state} />
+            <RevisionTimeline state={state} project={activeProject} />
+            <ActivityPanel state={state} project={activeProject} />
           </section>
 
           <form className="command-dock" onSubmit={submitCommand}>
@@ -279,11 +364,74 @@ function App() {
             <button className="command-submit" type="submit" aria-label="Add observation"><Icon name="arrow" size={17} /></button>
           </form>
           <div className="demo-controls"><span>Interactive replay</span><button onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={13} /> Fast-forward 20 min</button><button onClick={resetDemo}><Icon name="rotate" size={13} /> Reset snapshot</button><span className="demo-hint">Try: scan → clarify → correct</span></div>
+          </>}
+          {activeNav === "Evidence inbox" && <EvidenceInboxPage state={state} project={activeProject} onCapture={() => setCaptureOpen(true)} onNavigate={setActiveNav} />}
+          {activeNav === "Projects" && <ProjectsPage state={state} onCreate={() => setProjectModalOpen(true)} onSelect={selectProject} />}
+          {["Bench / 04", "Revisions", "Automations"].includes(activeNav) && <SecondaryPage view={activeNav} project={activeProject} state={state} dispatch={dispatch} onNavigate={setActiveNav} />}
         </div>
+        {captureOpen && <EvidenceCaptureModal file={evidenceFile} preview={evidencePreview} note={evidenceNote} setNote={setEvidenceNote} onFile={handleEvidenceFile} onClose={closeCapture} onSubmit={runCapture} busy={captureBusy} runtimeStatus={runtimeStatus} runtimeMessage={runtimeMessage} />}
+        {projectModalOpen && <ProjectModal name={newProjectName} location={newProjectLocation} setName={setNewProjectName} setLocation={setNewProjectLocation} onClose={() => setProjectModalOpen(false)} onSubmit={createProject} />}
         {commandOpen && <CommandPalette search={commandSearch} setSearch={setCommandSearch} close={() => { setCommandOpen(false); setCommandSearch(""); }} actions={[{ label: "Scan bench", detail: "Create the next semantic snapshot", icon: "scan", run: () => dispatch({ type: "SCAN" }) }, { label: "Fast-forward 20 min", detail: "Wake the expected-transition agent", icon: "clock", run: () => dispatch({ type: "ADVANCE_TIME" }) }, { label: "Reset snapshot", detail: "Return to the clean baseline", icon: "rotate", run: resetDemo }]} />}
       </main>
     </div>
   );
+}
+
+function WorkflowHeader({ project, phase, copy, onCapture, onScan }) {
+  const currentStep = { baseline: 1, diff: 2, confirmed: 3, corrected: 3, overdue: 4 }[phase] ?? 1;
+  const stateLabel = phase === "baseline" ? "ready for evidence" : phase === "diff" ? "needs your decision" : phase === "overdue" ? "follow-up overdue" : "state reconciled";
+  return <section className="workflow-header">
+    <div className="workflow-header-main">
+      <div className="workflow-title-meta"><span className="eyebrow"><span className="eyebrow-line" />PROJECT / {project.name}</span><StatusBadge tone={phase === "diff" || phase === "overdue" ? "warn" : "good"}>{stateLabel}</StatusBadge></div>
+      <h1>{phase === "baseline" ? "Make the next state visible." : copy.title}</h1>
+      <p>Groundstate turns a physical workspace into a sequence you can inspect, correct, and hand back to an agent.</p>
+      <div className="workflow-header-actions"><button className="primary-button" onClick={onCapture}><Icon name="camera" size={16} /> Capture evidence <Icon name="arrow" size={15} /></button><button className="secondary-button" onClick={onScan}><Icon name="scan" size={15} /> Replay sample scan</button></div>
+    </div>
+    <div className="workflow-state-card"><div className="panel-kicker">CURRENT WORKFLOW</div><strong>{currentStep === 1 ? "Start with one observation" : currentStep === 2 ? "Review the contradiction" : currentStep === 3 ? "Seal the corrected state" : "Check the overdue transition"}</strong><p>{currentStep === 1 ? "A photo or operator note becomes the first claim in this project." : "The agent keeps its uncertainty visible until you choose what is true."}</p><span className="workflow-state-line"><i style={{ width: `${currentStep * 25}%` }} /></span><small>step {String(currentStep).padStart(2, "0")} / 04</small></div>
+    <WorkflowStepper currentStep={currentStep} />
+  </section>;
+}
+
+function WorkflowStepper({ currentStep }) {
+  const steps = [["Capture", "photo + note"], ["Reconcile", "semantic diff"], ["Approve", "human anchor"], ["Follow up", "expected state"]];
+  return <div className="workflow-stepper" aria-label="Groundstate workflow">
+    {steps.map(([label, detail], index) => <div className={`workflow-step ${index + 1 < currentStep ? "step-done" : ""} ${index + 1 === currentStep ? "step-current" : ""}`} key={label}><span>{index + 1 < currentStep ? "✓" : String(index + 1).padStart(2, "0")}</span><div><strong>{label}</strong><small>{detail}</small></div>{index < steps.length - 1 && <i />}</div>)}
+  </div>;
+}
+
+function WorkflowPrompt({ phase, onCapture, onScan }) {
+  const prompts = {
+    baseline: { step: "01", label: "START HERE", title: "Capture the current bench", body: "Give Groundstate one photo, one voice note, or both. It will turn the evidence into a dated claim and show you what changed.", action: "Open evidence intake", icon: "camera", run: onCapture },
+    diff: { step: "02", label: "YOUR TURN", title: "Resolve the contradiction", body: "The agent found a likely transition but will not silently rewrite the record. Review the evidence bundle on the right and choose the human anchor.", action: "Review evidence bundle", icon: "arrow", run: () => document.querySelector(".queue-card")?.scrollIntoView({ behavior: "smooth", block: "center" }) },
+    confirmed: { step: "03", label: "STATE SEALED", title: "The world can move forward", body: "Your confirmation is now linked to the visual evidence and timing constraint. Capture the next observation when the bench changes again.", action: "Capture next state", icon: "camera", run: onCapture },
+    corrected: { step: "03", label: "REVISION APPLIED", title: "The correction traveled", body: "The old belief remains in history, while downstream assumptions now point at the corrected entity.", action: "Capture next state", icon: "camera", run: onCapture },
+    overdue: { step: "04", label: "AGENT WAKE-UP", title: "Find evidence for the overdue step", body: "The expected transition did not arrive on time. Add a fresh observation to close the loop or keep the task open.", action: "Scan for evidence", icon: "scan", run: onScan },
+  }[phase];
+  return <section className={`workflow-prompt prompt-${phase}`}><div className="prompt-step">{prompts.step}</div><div className="prompt-copy"><span className="panel-kicker">{prompts.label}</span><h2>{prompts.title}</h2><p>{prompts.body}</p></div><button className="prompt-action" onClick={prompts.run}><Icon name={prompts.icon} size={15} /> {prompts.action}</button></section>;
+}
+
+function EvidenceInboxPage({ state, project, onCapture, onNavigate }) {
+  const projectEvidence = state.evidence.filter((item) => item.projectId === project?.id);
+  const empty = projectEvidence.length === 0;
+  return <div className="secondary-page evidence-page"><SecondaryHero eyebrow="EVIDENCE INBOX" title="Bring the physical world in." body="Every photo and operator note becomes inspectable evidence before it changes the project memory." status={`${projectEvidence.length} evidence items`} tone="blue" /><div className="evidence-layout"><div className="evidence-intake-card"><div className="secondary-card-heading"><div><span className="panel-kicker">New observation</span><h2>Start a capture session</h2></div><span className="intake-shortcut">⌘ K</span></div><button className="upload-dropzone" onClick={onCapture}><span className="upload-mark"><Icon name="upload" size={20} /></span><span><strong>Upload a bench photo</strong><small>JPG, PNG · optional camera capture</small></span><Icon name="arrow" size={16} /></button><div className="intake-or"><span>or</span></div><div className="voice-note-preview"><span className="note-wave"><i /><i /><i /><i /><i /></span><span><strong>Add an operator note</strong><small>{empty ? "Start with a note about what is on the bench." : "A17 is washed and ready for the next step."}</small></span><button onClick={onCapture}>Add note</button></div><div className="evidence-contract"><span><Icon name="spark" size={14} /> Evidence contract</span><small>camera + voice → typed claim → human review</small></div></div><div className="recent-evidence-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Project evidence</span><h2>Recent captures</h2></div><StatusBadge tone="good" icon={false}>append-only</StatusBadge></div><div className={`evidence-list ${empty ? "evidence-list-empty" : ""}`}>{empty ? <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="upload" size={17} /></span><strong>No evidence in this project yet.</strong><small>Your first capture will appear here with its source, timestamp, and status.</small></div> : projectEvidence.map((item, index) => <EvidenceRow key={item.id} item={item} index={index} />)}</div>{!empty && <button className="text-button evidence-more" onClick={() => onNavigate("Revisions")}>View how evidence changed the record <Icon name="arrow" size={14} /></button>}</div></div><div className="evidence-next-step"><div><span className="panel-kicker">NEXT IN THIS PROJECT</span><strong>Capture → reconcile → approve → follow up</strong><small>The workflow is only complete when the next expected state is explicit.</small></div><button className="primary-button" onClick={onNavigate.bind(null, "Overview")}>Open active workflow <Icon name="arrow" size={15} /></button></div></div>;
+}
+
+function EvidenceRow({ item, index }) {
+  return <div className="evidence-row"><span className={`evidence-index evidence-index-${index % 3}`}>{String(index + 1).padStart(2, "0")}</span><span className="evidence-row-copy"><strong>{item.label}</strong><small>{item.detail}</small></span><StatusBadge tone="good" icon={false}>{item.status}</StatusBadge><Icon name="chevron" size={14} /></div>;
+}
+
+function ProjectsPage({ state, onCreate, onSelect }) {
+  const selected = state.projects.find((project) => project.id === state.activeProjectId) ?? state.projects[0];
+  return <div className="secondary-page projects-page"><SecondaryHero eyebrow="PROJECT MEMORY" title="Every workspace gets its own history." body="Projects keep observations, expected transitions, and revisions together—so a new bench never inherits the wrong reality." status={`${state.projects.length} projects`} tone="blue" /><div className="projects-layout"><div className="projects-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Your projects</span><h2>Workspaces</h2></div><button className="primary-button compact-button" onClick={onCreate}><Icon name="plus" size={14} /> New project</button></div><div className="projects-list">{state.projects.map((project) => <button className={`project-card ${project.id === state.activeProjectId ? "project-card-active" : ""}`} key={project.id} onClick={() => onSelect(project.id)}><span className="project-card-icon">{project.name.slice(0, 2).toUpperCase()}</span><span className="project-card-copy"><strong>{project.name}</strong><small>{project.location}</small></span><span className={`project-status status-${project.status}`}>{project.status}</span><span className="project-card-next">{project.next}</span><Icon name="chevron" size={14} /></button>)}</div></div><div className="project-detail-panel"><div className="project-detail-art"><span className="detail-art-grid" /><span className="detail-art-orbit" /><span className="detail-art-code">{selected.location.toUpperCase()}<br /><strong>{String(selected.entities).padStart(2, "0")}</strong> anchors</span></div><span className="panel-kicker">ACTIVE PROJECT</span><h2>{selected.name}</h2><p>{selected.id === "experiment-28" ? "A living record of the bench, its samples, and the transition the agent expects next." : "This project is ready for its first observation. Start with a photo or operator note."}</p><div className="project-stat-grid"><div><strong>{selected.entities}</strong><small>entities</small></div><div><strong>{selected.revisions}</strong><small>revisions</small></div><div><strong>{selected.status === "active" ? "LIVE" : "READY"}</strong><small>runtime</small></div></div><div className="project-next-action"><span className="panel-kicker">NEXT ACTION</span><strong>{selected.next}</strong><small>Every action updates this project’s world graph.</small></div><button className="primary-button full-button" onClick={() => onSelect(selected.id)}>{selected.entities ? "Open project workspace" : "Start project capture"} <Icon name="arrow" size={15} /></button></div></div></div>;
+}
+
+function EvidenceCaptureModal({ file, preview, note, setNote, onFile, onClose, onSubmit, busy, runtimeStatus, runtimeMessage }) {
+  const inputRef = useRef(null);
+  return <div className="modal-overlay" role="presentation" onMouseDown={onClose}><div className="capture-modal" role="dialog" aria-modal="true" aria-label="Add project evidence" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="panel-kicker">NEW OBSERVATION · PROJECT MEMORY</span><h2>What changed in the physical world?</h2><p>Attach evidence first. Groundstate will show its inference before it changes the record.</p></div><button className="modal-close" onClick={onClose} aria-label="Close evidence intake">Esc</button></div><div className="capture-form"><input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={onFile} /><button className={`capture-dropzone ${file ? "capture-dropzone-selected" : ""}`} onClick={() => inputRef.current?.click()}><span className="capture-drop-icon"><Icon name={file ? "check" : "upload"} size={22} /></span><span><strong>{file ? file.name : "Upload a bench photo"}</strong><small>{file ? `${Math.ceil(file.size / 1024)} KB · ready to analyze` : "PNG or JPG · camera capture supported"}</small></span><span className="capture-drop-arrow"><Icon name="arrow" size={15} /></span></button>{preview && <div className="capture-preview"><img src={preview} alt="Selected bench evidence preview" /><span>Evidence preview · not committed yet</span></div>}<label className="capture-note-label" htmlFor="operator-note"><span>Operator note <small>optional, but useful for identity</small></span><span className="note-counter">{note.length}/240</span></label><textarea id="operator-note" maxLength="240" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Example: A17 is washed and ready for the centrifuge…" /><div className="capture-suggestions"><button type="button" onClick={() => setNote("A17 is washed and ready for the centrifuge.")}>A17 is washed…</button><button type="button" onClick={() => setNote("The reagent moved to shelf B.")}>Reagent moved…</button><button type="button" onClick={() => setNote("Something changed on the bench.")}>Something changed…</button></div></div><div className="capture-footer"><span><i className={`runtime-dot runtime-dot-${runtimeStatus}`} />{runtimeMessage || (runtimeStatus === "google" ? "Gemini + Firestore + Pub/Sub connected" : "Replay-safe · no credentials required")}</span><div><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={onSubmit} disabled={busy}>{busy ? "Grounding…" : "Analyze evidence"} <Icon name="arrow" size={15} /></button></div></div></div></div>;
+}
+
+function ProjectModal({ name, location, setName, setLocation, onClose, onSubmit }) {
+  return <div className="modal-overlay" role="presentation" onMouseDown={onClose}><form className="project-modal" role="dialog" aria-modal="true" aria-label="Create a project" onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="panel-kicker">PROJECT MEMORY</span><h2>Create a new workspace</h2><p>Give Groundstate a context before you add the first observation.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Close project form">Esc</button></div><label>Project name<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Reactor inspection" /></label><label>Workspace or location<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. Bay / 07" /></label><div className="project-form-note"><Icon name="spark" size={15} /><span><strong>A project is a living context.</strong><small>Its evidence, revisions, and expected transitions stay together.</small></span></div><div className="modal-footer"><button className="secondary-button" type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">Create project <Icon name="arrow" size={15} /></button></div></form></div>;
 }
 
 function Metric({ label, value, delta, tone }) {
@@ -295,8 +443,8 @@ function CommandPalette({ search, setSearch, close, actions }) {
   return <div className="command-overlay" role="presentation" onMouseDown={close}><div className="command-palette" role="dialog" aria-modal="true" aria-label="Groundstate command center" onMouseDown={(event) => event.stopPropagation()}><div className="command-palette-top"><div><span className="command-palette-icon"><Icon name="spark" size={16} /></span><div><span className="panel-kicker">Groundstate command center</span><strong>Move through the replay</strong></div></div><button className="command-close" onClick={close} aria-label="Close command center">Esc</button></div><div className="command-search-wrap"><Icon name="command" size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a command…" /></div><div className="command-list">{visibleActions.length ? visibleActions.map((action) => <button key={action.label} className="command-item" onClick={() => { action.run(); close(); }}><span className="command-item-icon"><Icon name={action.icon} size={15} /></span><span><strong>{action.label}</strong><small>{action.detail}</small></span><Icon name="arrow" size={14} /></button>) : <div className="command-empty">No matching command. Try “scan” or “reset”.</div>}</div><div className="command-palette-footer"><span><kbd>⌘</kbd><kbd>K</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div></div></div>;
 }
 
-function SecondaryPage({ view, state, dispatch, onNavigate }) {
-  if (view === "Bench / 04") return <div className="secondary-page"><SecondaryHero eyebrow="LIVE SPATIAL MEMORY" title="Bench / 04, in the present tense." body="A pinned view of the workspace as it exists now—plus the one transition the agent expects next." status={state.phase === "diff" ? "clarification pending" : "7 anchors synced"} tone={state.phase === "diff" ? "warn" : "good"} /><div className="secondary-bench-grid"><div className="bench-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Spatial memory</span><h2>Observed surface</h2></div><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Scan again</button></div><MiniBenchMap phase={state.phase} /></div><div className="entity-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Tracked entities</span><h2>7 anchors</h2></div><StatusBadge tone="good" icon={false}>live</StatusBadge></div><div className="tracked-list"><TrackedEntity label="A17" detail={state.phase === "diff" || state.phase === "overdue" ? "requires evidence" : "washed · rack 4"} tone={state.phase === "diff" || state.phase === "overdue" ? "coral" : "lime"} /><TrackedEntity label="B02" detail={state.phase === "corrected" ? "centrifuging" : "prepared · rack 7"} tone="coral" /><TrackedEntity label="PX-9" detail="40% remaining" tone="blue" /><TrackedEntity label="C-01" detail={state.phase === "diff" || state.phase === "confirmed" ? "running" : "idle"} tone={state.phase === "diff" || state.phase === "confirmed" ? "lime" : "yellow"} /></div><div className="secondary-note"><Icon name="clock" size={14} /><span>Next expected <strong>A17 → centrifuge</strong><small>in 20 minutes</small></span></div></div></div><div className="secondary-bottom"><RevisionTimeline state={state} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
+function SecondaryPage({ view, project, state, dispatch, onNavigate }) {
+  if (view === "Bench / 04") return <div className="secondary-page"><SecondaryHero eyebrow="LIVE SPATIAL MEMORY" title={`${project?.location ?? "Bench / 04"}, in the present tense.`} body="A pinned view of the workspace as it exists now—plus the one transition the agent expects next." status={project?.entities === 0 ? "ready for first capture" : state.phase === "diff" ? "clarification pending" : "7 anchors synced"} tone={project?.entities === 0 ? "blue" : state.phase === "diff" ? "warn" : "good"} /><div className="secondary-bench-grid"><div className="bench-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Spatial memory</span><h2>Observed surface</h2></div><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Scan again</button></div><MiniBenchMap phase={state.phase} empty={project?.entities === 0} /></div><div className="entity-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Tracked entities</span><h2>{project?.entities === 0 ? "No anchors yet" : "7 anchors"}</h2></div><StatusBadge tone={project?.entities === 0 ? "blue" : "good"} icon={false}>{project?.entities === 0 ? "ready" : "live"}</StatusBadge></div><div className="tracked-list">{project?.entities === 0 ? <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="camera" size={16} /></span><strong>Waiting for the first observation.</strong><small>Capture evidence to create the first spatial anchors.</small></div> : <><TrackedEntity label="A17" detail={state.phase === "diff" || state.phase === "overdue" ? "requires evidence" : "washed · rack 4"} tone={state.phase === "diff" || state.phase === "overdue" ? "coral" : "lime"} /><TrackedEntity label="B02" detail={state.phase === "corrected" ? "centrifuging" : "prepared · rack 7"} tone="coral" /><TrackedEntity label="PX-9" detail="40% remaining" tone="blue" /><TrackedEntity label="C-01" detail={state.phase === "diff" || state.phase === "confirmed" ? "running" : "idle"} tone={state.phase === "diff" || state.phase === "confirmed" ? "lime" : "yellow"} /></>}</div><div className="secondary-note"><Icon name="clock" size={14} /><span>Next expected <strong>{project?.entities === 0 ? "first observation" : "A17 → centrifuge"}</strong><small>{project?.entities === 0 ? "not scheduled yet" : "in 20 minutes"}</small></span></div></div></div><div className="secondary-bottom"><RevisionTimeline state={state} project={project} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
   if (view === "Revisions") return <div className="secondary-page"><SecondaryHero eyebrow="IMMUTABLE WORLD LOG" title="Every correction leaves a trail." body="Beliefs can be superseded, but never silently erased. Revisions keep the operator, evidence, and downstream repairs visible." status="18 revisions" tone="blue" /><div className="revision-page-grid"><div className="revision-index-card"><div className="revision-index-top"><span className="panel-kicker">Current head</span><span className="revision-hash">8f4d…c12</span></div><strong>18</strong><span>world revision</span><div className="revision-stack"><RevisionStackRow number="18" label="B02 → centrifuge" tone="lime" active /><RevisionStackRow number="17" label="A17 → washed" tone="blue" /><RevisionStackRow number="16" label="Experiment 28 opened" tone="cream" /></div></div><div className="revision-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Revision #18</span><h2>Dependent assumptions repaired</h2></div><StatusBadge tone="blue" icon={false}>human authored</StatusBadge></div><p className="revision-lede">A correction does not overwrite the old claim. It tells the world model what to restore, what to move, and which evidence made the difference.</p><div className="revision-diff"><DiffRow marker="−" label="A17" from="centrifuging" to="timer restored" tone="blue" /><DiffRow marker="+" label="B02" from="rack 7" to="centrifuging" tone="coral" /><DiffRow marker="~" label="Experiment 28" from="blocked" to="reconciled" tone="lime" /></div><div className="revision-footer"><span><Icon name="check" size={14} />3 dependent assumptions repaired</span><span>operator · just now</span></div></div></div><div className="secondary-bottom"><ActivityPanel state={state} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
   return <div className="secondary-page"><SecondaryHero eyebrow="ASYNC EXPECTATIONS" title="The agent keeps time for you." body="Every procedural step has a due window, a next expected state, and a wake-up path when evidence does not arrive." status="Pub/Sub connected" tone="good" /><div className="automation-grid"><div className="automation-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Active automations</span><h2>Expected transitions</h2></div><StatusBadge tone="good" icon={false}>3 running</StatusBadge></div><AutomationRow label="A17 · centrifuge" detail="expected in 20 min" state="scheduled" tone="blue" /><AutomationRow label="PX-9 · replenish" detail="when level drops below 20%" state="watching" tone="yellow" /><AutomationRow label="Experiment 28 · archive" detail="after verification passes" state="armed" tone="lime" /></div><div className="automation-console"><div className="console-orbit"><span>20:00</span><i /><i /><i /></div><span className="panel-kicker">NEXT WAKE-UP</span><h2>14:51 IST</h2><p>Pub/Sub will wake the agent, check for new evidence, and reopen the exact task—not a generic inbox.</p><button className="primary-button full-button" onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={15} /> Simulate wake-up</button></div></div><div className="automation-log"><div className="secondary-card-heading"><div><span className="panel-kicker">Trigger log</span><h2>What the agent does while you’re away</h2></div><span className="plan-id">append-only</span></div><AutomationLogRow time="14:31" title="A17 state recorded" detail="washed · next expected centrifuge" /><AutomationLogRow time="14:31" title="Wake-up scheduled" detail="topic: groundstate-follow-ups" /><AutomationLogRow time={state.phase === "overdue" ? "15:13" : "—"} title={state.phase === "overdue" ? "No evidence found" : "Waiting for due window"} detail={state.phase === "overdue" ? "task reopened · operator attention required" : "the world is still on schedule"} alert={state.phase === "overdue"} /></div><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div>;
 }
@@ -305,7 +453,8 @@ function SecondaryHero({ eyebrow, title, body, status, tone }) {
   return <section className="secondary-hero"><div><div className="eyebrow"><span className="eyebrow-line" />{eyebrow}</div><h1>{title}</h1><p>{body}</p></div><StatusBadge tone={tone}>{status}</StatusBadge></section>;
 }
 
-function MiniBenchMap({ phase }) {
+function MiniBenchMap({ phase, empty = false }) {
+  if (empty) return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-empty"><Icon name="camera" size={17} /><strong>No spatial anchors yet</strong><small>Capture evidence to place the first claim.</small></div><span className="mini-map-caption">waiting for first observation</span></div>;
   const centrifugeLabel = ["diff", "confirmed"].includes(phase) ? "running" : "idle";
   return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-node mini-node-a"><b>A17</b><span>{phase === "diff" || phase === "overdue" ? "missing" : "washed"}</span></div><div className="mini-map-node mini-node-b"><b>B02</b><span>{phase === "corrected" ? "spinning" : "rack 7"}</span></div><div className="mini-map-node mini-node-c"><b>C-01</b><span>{centrifugeLabel}</span></div><div className="mini-map-node mini-node-p"><b>PX-9</b><span>40%</span></div><svg viewBox="0 0 700 230" preserveAspectRatio="none" aria-hidden="true"><path d="M90 119 C185 109 246 66 345 78 S482 70 595 45" /><path d="M90 119 C188 145 238 183 350 154 S478 166 602 191" /></svg><span className="mini-map-caption">camera anchor map · confidence 0.96</span></div>;
 }
@@ -363,15 +512,20 @@ function EntityMarker({ entity, phase }) {
   return <div className={`entity-marker ${entity.position} marker-${entity.tone} ${isAttention ? "marker-attention" : ""}`}><div className="entity-pin">{icon}</div><div className="entity-text"><strong>{entity.id}</strong><span>{entity.detail}</span></div>{isAttention && <span className="marker-alert"><Icon name="alert" size={11} /></span>}</div>;
 }
 
-function AgentQueue({ state, dispatch }) {
+function AgentQueue({ state, project, dispatch, onOpenEvidence }) {
+  const isNewProject = project?.entities === 0;
   const isPending = state.phase === "diff";
   const isOverdue = state.phase === "overdue";
   const isCorrected = state.phase === "corrected";
   const isConfirmed = state.phase === "confirmed";
   return <div className={`queue-card panel-card ${isPending || isOverdue ? "queue-attention" : ""}`}>
-    <div className="queue-top"><div className="agent-avatar"><span>✦</span></div><div><div className="panel-kicker">Agent queue</div><h2>{isOverdue ? "Follow-up required" : isPending ? "One thing needs you" : isConfirmed ? "A17 confirmed" : "All caught up"}</h2></div><StatusBadge tone={isPending || isOverdue ? "warn" : "good"} icon={false}>{isOverdue ? "overdue" : isPending ? "pending" : isConfirmed ? "sealed" : "synced"}</StatusBadge></div>
+    <div className="queue-top"><div className="agent-avatar"><span>✦</span></div><div><div className="panel-kicker">Agent queue</div><h2>{isNewProject ? "Ready for first observation" : isOverdue ? "Follow-up required" : isPending ? "One thing needs you" : isConfirmed ? "A17 confirmed" : "All caught up"}</h2></div><StatusBadge tone={isPending || isOverdue ? "warn" : isNewProject ? "blue" : "good"} icon={false}>{isNewProject ? "ready" : isOverdue ? "overdue" : isPending ? "pending" : isConfirmed ? "sealed" : "synced"}</StatusBadge></div>
     <div className="queue-divider" />
-    {isPending ? <>
+    {isNewProject ? <>
+      <div className="queue-new-project"><div className="new-project-illustration"><Icon name="camera" size={17} /></div><div><strong>No world state yet</strong><p>Start this project with a photo or operator note. The agent will create the first dated claim here.</p></div></div>
+      <div className="queue-revision queue-new-revision"><span>PROJECT MEMORY</span><strong>WAITING FOR EVIDENCE</strong><small>nothing is assumed before the first capture</small></div>
+      <button className="primary-button full-button" onClick={onOpenEvidence}><Icon name="camera" size={15} /> Start first capture <Icon name="arrow" size={15} /></button>
+    </> : isPending ? <>
       <div className="queue-question"><span className="question-mark">?</span><div><strong>Where did A17 go?</strong><p>It disappeared from rack 4 while C-01 started running. Timing suggests a transition, but the record needs a human anchor.</p></div></div>
       <div className="queue-evidence"><div className="evidence-head"><span>LIKELY TRANSITION</span><strong>0.71 confidence</strong></div><div className="evidence-flow"><span>A17 · washed</span><Icon name="arrow" size={14} /><span className="evidence-highlight">centrifuging?</span></div><div className="evidence-tags"><span>visual match</span><span>timer constraint</span><span>machine state</span></div></div>
       <div className="queue-actions"><button className="primary-button" onClick={() => dispatch({ type: "CONFIRM_A17" })}>Confirm A17 <Icon name="arrow" size={15} /></button><button className="secondary-button" onClick={() => dispatch({ type: "CORRECT_TO_B02" })}>It’s B02</button></div>
@@ -389,7 +543,7 @@ function AgentQueue({ state, dispatch }) {
     </> : <>
       <div className="queue-clear"><div className="clear-illustration"><span /><span /><span /></div><div><strong>Nothing unresolved</strong><p>Every active claim has evidence, an owner, and a next expected transition.</p></div></div>
       <div className="next-transition"><div><span className="tiny-label">NEXT EXPECTED</span><strong>A17 <span>→</span> centrifuge</strong></div><span className="transition-time">in 20 min</span></div>
-      <button className="secondary-button full-button" onClick={() => dispatch({ type: "SCAN" })}>Replay next observation <Icon name="arrow" size={15} /></button>
+      <div className="queue-actions"><button className="primary-button" onClick={onOpenEvidence}><Icon name="camera" size={15} /> Capture evidence</button><button className="secondary-button" onClick={() => dispatch({ type: "SCAN" })}>Replay sample <Icon name="arrow" size={15} /></button></div>
     </>}
     <div className="queue-footer"><span><span className="live-pulse" />agent listening</span><span>latency 240ms</span></div>
   </div>;
@@ -399,7 +553,8 @@ function DiffRow({ marker, label, from, to, tone }) {
   return <div className="diff-row"><span className={`diff-marker diff-marker-${tone}`}>{marker}</span><span className="diff-entity">{label}</span><span className="diff-from">{from}</span><Icon name="arrow" size={14} /><span className={`diff-to diff-to-${tone}`}>{to}</span></div>;
 }
 
-function RevisionTimeline({ state }) {
+function RevisionTimeline({ state, project }) {
+  const isNewProject = project?.entities === 0;
   const phaseEvent = {
     baseline: { time: "14:51", title: "Expected · centrifuge", kind: "next" },
     diff: { time: "14:53", title: "Bench rescan", kind: "active" },
@@ -414,17 +569,27 @@ function RevisionTimeline({ state }) {
       : state.phase === "overdue"
         ? { time: "15:15", title: "Action overdue", kind: "active" }
         : { time: "15:13", title: "Agent wake-up", kind: "future" };
-  const events = [
+  const events = isNewProject ? [
+    { time: "—", title: "Project created", kind: "done" },
+    { time: "—", title: "Add first evidence", kind: "next" },
+    { time: "—", title: "Agent reconciliation", kind: "future" },
+    { time: "—", title: "Expected follow-up", kind: "future" },
+  ] : [
     { time: "14:22", title: "Experiment 28 opened", kind: "done" },
     { time: "14:31", title: "A17 washed", kind: "done" },
     phaseEvent,
     finalEvent,
   ];
-  return <div className="timeline-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Procedural memory</div><h2>Expected sequence</h2></div><button className="icon-button icon-button-light"><Icon name="more" size={16} /></button></div><div className="timeline-line"><span className="timeline-progress" style={{ width: state.phase === "baseline" ? "47%" : state.phase === "corrected" ? "86%" : "69%" }} /></div><div className="timeline-events">{events.map((event) => <div className={`timeline-event event-${event.kind}`} key={`${event.time}-${event.title}`}><span className="event-time">{event.time}</span><span className="event-dot" /><strong>{event.title}</strong></div>)}</div><div className="timeline-caption"><span><Icon name="spark" size={13} />state machine · Experiment 28</span><span>+ 4 dependent steps</span></div></div>;
+  return <div className="timeline-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Procedural memory</div><h2>Expected sequence</h2></div><button className="icon-button icon-button-light"><Icon name="more" size={16} /></button></div><div className="timeline-line"><span className="timeline-progress" style={{ width: isNewProject ? "12%" : state.phase === "baseline" ? "47%" : state.phase === "corrected" ? "86%" : "69%" }} /></div><div className="timeline-events">{events.map((event) => <div className={`timeline-event event-${event.kind}`} key={`${event.time}-${event.title}`}><span className="event-time">{event.time}</span><span className="event-dot" /><strong>{event.title}</strong></div>)}</div><div className="timeline-caption"><span><Icon name="spark" size={13} />state machine · {project?.name ?? "Experiment 28"}</span><span>{isNewProject ? "awaiting first claim" : "+ 4 dependent steps"}</span></div></div>;
 }
 
-function ActivityPanel({ state }) {
-  const rows = state.phase === "baseline" ? [
+function ActivityPanel({ state, project }) {
+  const isNewProject = project?.entities === 0;
+  const rows = isNewProject ? [
+    ["now", "Project created", "good"],
+    ["—", "Awaiting first evidence", "blue"],
+    ["—", "No claims written yet", "cream"],
+  ] : state.phase === "baseline" ? [
     ["14:31", "Snapshot #17 committed", "good"],
     ["14:29", "A17 state → WASHED", "blue"],
     ["14:22", "Experiment 28 linked", "cream"],

@@ -28,3 +28,31 @@ test("reset returns the exact baseline state", () => {
   const changed = demoReducer(initialState, { type: "SCAN" });
   assert.deepEqual(demoReducer(changed, { type: "RESET" }), initialState);
 });
+
+test("creating a project makes it the active empty workspace", () => {
+  const project = { id: "project-new", name: "Field calibration", location: "Bay / 09", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" };
+  const next = demoReducer(initialState, { type: "CREATE_PROJECT", project });
+  assert.equal(next.activeProjectId, "project-new");
+  assert.equal(next.projects[0].name, "Field calibration");
+  assert.equal(next.snapshot, 1);
+  assert.equal(next.time, "—");
+});
+
+test("adding evidence activates a fresh project and keeps the project list", () => {
+  const project = { id: "project-new", name: "Field calibration", location: "Bay / 09", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" };
+  const created = demoReducer(initialState, { type: "CREATE_PROJECT", project });
+  const next = demoReducer(created, { type: "ADD_EVIDENCE", evidence: { id: "evidence-new", label: "Bench photo", detail: "photo · just now", status: "processed" } });
+  assert.equal(next.projects[0].status, "active");
+  assert.equal(next.projects[0].entities, 7);
+  assert.equal(next.projects[0].revisions, 1);
+  assert.equal(next.evidence[0].label, "Bench photo");
+});
+
+test("resetting a snapshot does not delete managed projects", () => {
+  const project = { id: "project-new", name: "Field calibration", location: "Bay / 09", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" };
+  const created = demoReducer(initialState, { type: "CREATE_PROJECT", project });
+  const reset = demoReducer(created, { type: "RESET_SNAPSHOT" });
+  assert.equal(reset.projects[0].name, "Field calibration");
+  assert.equal(reset.activeProjectId, "project-new");
+  assert.equal(reset.lastAction, "Snapshot reset");
+});
