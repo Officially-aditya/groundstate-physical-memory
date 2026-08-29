@@ -4,6 +4,9 @@ Groundstate is “Git for the Physical World”: a persistent memory agent for a
 
 This project is built for the **Collaborative Partner** track of the **All Things Agentic Hackathon**. The agent leads the operator through a clarification, records the correction, and adapts the downstream world state instead of silently overwriting history.
 
+**Live demo:** https://officially-aditya.github.io/groundstate-physical-memory/  
+**Source:** https://github.com/Officially-aditya/groundstate-physical-memory
+
 ## Demo loop
 
 1. Start at **Overview** and select **Scan bench**.

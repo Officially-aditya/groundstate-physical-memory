@@ -4,6 +4,11 @@
 
 Groundstate
 
+## Links
+
+- Hosted demo: https://officially-aditya.github.io/groundstate-physical-memory/
+- Source repository: https://github.com/Officially-aditya/groundstate-physical-memory
+
 ## Elevator pitch
 
 Git remembers code. Groundstate remembers reality.
