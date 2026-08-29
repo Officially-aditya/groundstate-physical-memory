@@ -20,7 +20,7 @@ The browser experience is intentionally deterministic and cost-safe. It is a fai
 
 The Cloud Run-friendly runtime in `backend/` is the live integration path:
 
-- `google-genai` calls **Gemini 3.5 Flash** with a camera frame, voice note, and remembered world state.
+- `google-genai` calls **Gemini 3.5 Flash Lite** with a camera frame, voice note, and remembered world state.
 - `google-cloud-firestore` persists temporal claims with provenance.
 - `google-cloud-pubsub` publishes expected-transition wake-ups for asynchronous follow-up.
 
@@ -54,7 +54,7 @@ gcloud run deploy groundstate \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars GEMINI_MODEL=gemini-3.5-flash
+  --set-env-vars GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 Add `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and the Pub/Sub topic through Cloud Run’s secret/environment configuration. A Cloud Run deployment serves the frontend and `/api/observe` from one origin, so the UI automatically switches from replay mode to the Google-backed runtime when the health endpoint reports `google_runtime_ready: true`.
