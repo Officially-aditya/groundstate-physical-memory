@@ -1,4 +1,4 @@
-import { useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { demoReducer, initialState } from "./stateMachine.js";
 
 const navItems = [
@@ -85,9 +85,23 @@ function App() {
   const [state, dispatch] = useReducer(demoReducer, initialState);
   const [activeNav, setActiveNav] = useState("Overview");
   const [command, setCommand] = useState("");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandSearch, setCommandSearch] = useState("");
   const copy = phaseCopy[state.phase];
   const isDiff = ["diff", "overdue"].includes(state.phase);
   const diffRows = getDiffRows(state.phase);
+
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+      if (event.key === "Escape") setCommandOpen(false);
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   const activeEntities = useMemo(() => entities.map((entity) => {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
@@ -150,7 +164,7 @@ function App() {
       <main className="main-panel">
         <header className="topbar">
           <div className="breadcrumb"><span className="breadcrumb-muted">Workspace</span><Icon name="chevron" size={13} /><span>Bench / 04</span><span className="breadcrumb-live"><span />LIVE</span></div>
-          <div className="topbar-actions"><button className="icon-button" title="Open command palette"><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
+          <div className="topbar-actions"><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
         <div className="content-wrap">
@@ -221,6 +235,7 @@ function App() {
           </form>
           <div className="demo-controls"><span>Interactive replay</span><button onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={13} /> Fast-forward 20 min</button><button onClick={resetDemo}><Icon name="rotate" size={13} /> Reset snapshot</button><span className="demo-hint">Try: scan → clarify → correct</span></div>
         </div>
+        {commandOpen && <CommandPalette search={commandSearch} setSearch={setCommandSearch} close={() => { setCommandOpen(false); setCommandSearch(""); }} actions={[{ label: "Scan bench", detail: "Create the next semantic snapshot", icon: "scan", run: () => dispatch({ type: "SCAN" }) }, { label: "Fast-forward 20 min", detail: "Wake the expected-transition agent", icon: "clock", run: () => dispatch({ type: "ADVANCE_TIME" }) }, { label: "Reset snapshot", detail: "Return to the clean baseline", icon: "rotate", run: resetDemo }]} />}
       </main>
     </div>
   );
@@ -228,6 +243,11 @@ function App() {
 
 function Metric({ label, value, delta, tone }) {
   return <div className="metric-card"><div className={`metric-orb orb-${tone}`} /><div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-delta">{delta}</div></div><Icon name="more" size={15} /></div>;
+}
+
+function CommandPalette({ search, setSearch, close, actions }) {
+  const visibleActions = actions.filter((action) => `${action.label} ${action.detail}`.toLowerCase().includes(search.toLowerCase()));
+  return <div className="command-overlay" role="presentation" onMouseDown={close}><div className="command-palette" role="dialog" aria-modal="true" aria-label="Groundstate command center" onMouseDown={(event) => event.stopPropagation()}><div className="command-palette-top"><div><span className="command-palette-icon"><Icon name="spark" size={16} /></span><div><span className="panel-kicker">Groundstate command center</span><strong>Move through the replay</strong></div></div><button className="command-close" onClick={close} aria-label="Close command center">Esc</button></div><div className="command-search-wrap"><Icon name="command" size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a command…" /></div><div className="command-list">{visibleActions.length ? visibleActions.map((action) => <button key={action.label} className="command-item" onClick={() => { action.run(); close(); }}><span className="command-item-icon"><Icon name={action.icon} size={15} /></span><span><strong>{action.label}</strong><small>{action.detail}</small></span><Icon name="arrow" size={14} /></button>) : <div className="command-empty">No matching command. Try “scan” or “reset”.</div>}</div><div className="command-palette-footer"><span><kbd>⌘</kbd><kbd>K</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div></div></div>;
 }
 
 function getDiffRows(phase) {
