@@ -87,7 +87,7 @@ Every assertion is designed to carry its claim, evidence, confidence, validity w
 
 ## Design direction
 
-The UI uses a dark control-room shell with a warm editorial canvas, graph-like spatial memory, tiny mono labels, deliberate asymmetry, and restrained micro-motion. The direction borrows compositional cues from Pinterest’s visual contrast, React Bits’ motion/detail language, 21st.dev’s product surfaces, and shadcn’s low-noise component treatment without copying any one interface.
+The UI uses familiar product primitives—workspace switcher, project tabs, evidence inbox, status badges, command palette, and dense activity cards—so an operator can orient immediately. The differentiator is the content model: a physical state graph with evidence provenance, expected transitions, semantic diffs, human anchors, and autonomous wake-ups. The dark control-room layer, spatial memory map, tiny mono labels, deliberate asymmetry, and restrained micro-motion borrow compositional cues from Pinterest’s visual contrast, React Bits’ motion/detail language, 21st.dev’s product surfaces, and shadcn’s low-noise component treatment without copying any one interface.
 
 ## License
 

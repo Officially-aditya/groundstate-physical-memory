@@ -16,6 +16,19 @@ export const initialState = {
   ],
 };
 
+export const actualInitialState = {
+  phase: "baseline",
+  snapshot: 0,
+  time: "—",
+  note: "No observations yet. Add evidence to begin this workspace.",
+  lastAction: "Workspace created",
+  activeProjectId: "workspace-default",
+  projects: [
+    { id: "workspace-default", name: "My workspace", location: "Add a location", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" },
+  ],
+  evidence: [],
+};
+
 export function demoReducer(state, action) {
   switch (action.type) {
     case "SCAN":
@@ -96,6 +109,8 @@ export function demoReducer(state, action) {
         lastAction: "Snapshot reset",
       };
     }
+    case "LOAD_WORKSPACE":
+      return action.state;
     case "RESET":
       return initialState;
     default:

@@ -26,6 +26,8 @@ Groundstate gives physical workspaces persistent memory. It observes a place ove
 
 The product has a real front door: operators can create and switch projects, open an evidence inbox, upload a bench photo, add an operator note, and follow a visible four-step workflow from capture to reconciliation to human approval to autonomous follow-up.
 
+The familiar project header, tabs, status badges, and activity patterns are deliberate interaction grammar: they make the product immediately legible. What is being managed is not source code—it is a physical state graph whose rows are evidence-backed claims, expected transitions, and human-authored revisions.
+
 ## About the project
 
 Software remembers everything that happens inside it. Physical work remembers almost nothing.

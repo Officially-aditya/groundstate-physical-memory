@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { demoReducer, initialState } from "../src/stateMachine.js";
+import { actualInitialState, demoReducer, initialState } from "../src/stateMachine.js";
 
 test("a new scan creates a semantic diff snapshot", () => {
   const next = demoReducer(initialState, { type: "SCAN" });
@@ -55,4 +55,16 @@ test("resetting a snapshot does not delete managed projects", () => {
   assert.equal(reset.projects[0].name, "Field calibration");
   assert.equal(reset.activeProjectId, "project-new");
   assert.equal(reset.lastAction, "Snapshot reset");
+});
+
+test("live workspace starts without seeded demo records", () => {
+  assert.equal(actualInitialState.projects.length, 1);
+  assert.equal(actualInitialState.projects[0].entities, 0);
+  assert.deepEqual(actualInitialState.evidence, []);
+});
+
+test("mode switching can load a separate workspace state", () => {
+  const next = demoReducer(actualInitialState, { type: "LOAD_WORKSPACE", state: initialState });
+  assert.equal(next.activeProjectId, "experiment-28");
+  assert.equal(next.evidence.length, 2);
 });
