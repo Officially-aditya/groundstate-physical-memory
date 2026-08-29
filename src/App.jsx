@@ -90,6 +90,7 @@ function App() {
   const copy = phaseCopy[state.phase];
   const isDiff = ["diff", "overdue"].includes(state.phase);
   const diffRows = getDiffRows(state.phase);
+  const currentLocation = activeNav === "Overview" ? "Bench / 04" : activeNav;
 
   useEffect(() => {
     const handleShortcut = (event) => {
@@ -136,7 +137,7 @@ function App() {
         <div className="sidebar-section-label">Workspace</div>
         <nav className="primary-nav" aria-label="Primary navigation">
           {navItems.map((item) => (
-            <button className={`nav-item ${activeNav === item.label ? "nav-active" : ""}`} key={item.label} onClick={() => setActiveNav(item.label)}>
+            <button className={`nav-item ${activeNav === item.label ? "nav-active" : ""}`} key={item.label} aria-current={activeNav === item.label ? "page" : undefined} onClick={() => setActiveNav(item.label)}>
               <Icon name={item.icon} size={17} />
               <span>{item.label}</span>
               {item.label === "Revisions" && <span className="nav-count">18</span>}
@@ -163,11 +164,12 @@ function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-muted">Workspace</span><Icon name="chevron" size={13} /><span>Bench / 04</span><span className="breadcrumb-live"><span />LIVE</span></div>
+          <div className="breadcrumb"><span className="breadcrumb-muted">Workspace</span><Icon name="chevron" size={13} /><span>{currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
           <div className="topbar-actions"><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
-        <div className="content-wrap">
+        <div className={`content-wrap ${activeNav !== "Overview" ? "content-wrap-secondary" : ""}`}>
+          {activeNav !== "Overview" && <SecondaryPage view={activeNav} state={state} dispatch={dispatch} onNavigate={setActiveNav} />}
           <section className="hero-section">
             <div className="hero-copy">
               <div className="eyebrow"><span className="eyebrow-line" />{copy.eyebrow}</div>
@@ -248,6 +250,37 @@ function Metric({ label, value, delta, tone }) {
 function CommandPalette({ search, setSearch, close, actions }) {
   const visibleActions = actions.filter((action) => `${action.label} ${action.detail}`.toLowerCase().includes(search.toLowerCase()));
   return <div className="command-overlay" role="presentation" onMouseDown={close}><div className="command-palette" role="dialog" aria-modal="true" aria-label="Groundstate command center" onMouseDown={(event) => event.stopPropagation()}><div className="command-palette-top"><div><span className="command-palette-icon"><Icon name="spark" size={16} /></span><div><span className="panel-kicker">Groundstate command center</span><strong>Move through the replay</strong></div></div><button className="command-close" onClick={close} aria-label="Close command center">Esc</button></div><div className="command-search-wrap"><Icon name="command" size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a command…" /></div><div className="command-list">{visibleActions.length ? visibleActions.map((action) => <button key={action.label} className="command-item" onClick={() => { action.run(); close(); }}><span className="command-item-icon"><Icon name={action.icon} size={15} /></span><span><strong>{action.label}</strong><small>{action.detail}</small></span><Icon name="arrow" size={14} /></button>) : <div className="command-empty">No matching command. Try “scan” or “reset”.</div>}</div><div className="command-palette-footer"><span><kbd>⌘</kbd><kbd>K</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div></div></div>;
+}
+
+function SecondaryPage({ view, state, dispatch, onNavigate }) {
+  if (view === "Bench / 04") return <div className="secondary-page"><SecondaryHero eyebrow="LIVE SPATIAL MEMORY" title="Bench / 04, in the present tense." body="A pinned view of the workspace as it exists now—plus the one transition the agent expects next." status={state.phase === "diff" ? "clarification pending" : "7 anchors synced"} tone={state.phase === "diff" ? "warn" : "good"} /><div className="secondary-bench-grid"><div className="bench-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Spatial memory</span><h2>Observed surface</h2></div><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Scan again</button></div><MiniBenchMap phase={state.phase} /></div><div className="entity-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Tracked entities</span><h2>7 anchors</h2></div><StatusBadge tone="good" icon={false}>live</StatusBadge></div><div className="tracked-list"><TrackedEntity label="A17" detail={state.phase === "diff" || state.phase === "overdue" ? "requires evidence" : "washed · rack 4"} tone={state.phase === "diff" || state.phase === "overdue" ? "coral" : "lime"} /><TrackedEntity label="B02" detail={state.phase === "corrected" ? "centrifuging" : "prepared · rack 7"} tone="coral" /><TrackedEntity label="PX-9" detail="40% remaining" tone="blue" /><TrackedEntity label="C-01" detail={state.phase === "diff" || state.phase === "confirmed" ? "running" : "idle"} tone={state.phase === "diff" || state.phase === "confirmed" ? "lime" : "yellow"} /></div><div className="secondary-note"><Icon name="clock" size={14} /><span>Next expected <strong>A17 → centrifuge</strong><small>in 20 minutes</small></span></div></div></div><div className="secondary-bottom"><RevisionTimeline state={state} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
+  if (view === "Revisions") return <div className="secondary-page"><SecondaryHero eyebrow="IMMUTABLE WORLD LOG" title="Every correction leaves a trail." body="Beliefs can be superseded, but never silently erased. Revisions keep the operator, evidence, and downstream repairs visible." status="18 revisions" tone="blue" /><div className="revision-page-grid"><div className="revision-index-card"><div className="revision-index-top"><span className="panel-kicker">Current head</span><span className="revision-hash">8f4d…c12</span></div><strong>18</strong><span>world revision</span><div className="revision-stack"><RevisionStackRow number="18" label="B02 → centrifuge" tone="lime" active /><RevisionStackRow number="17" label="A17 → washed" tone="blue" /><RevisionStackRow number="16" label="Experiment 28 opened" tone="cream" /></div></div><div className="revision-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Revision #18</span><h2>Dependent assumptions repaired</h2></div><StatusBadge tone="blue" icon={false}>human authored</StatusBadge></div><p className="revision-lede">A correction does not overwrite the old claim. It tells the world model what to restore, what to move, and which evidence made the difference.</p><div className="revision-diff"><DiffRow marker="−" label="A17" from="centrifuging" to="timer restored" tone="blue" /><DiffRow marker="+" label="B02" from="rack 7" to="centrifuging" tone="coral" /><DiffRow marker="~" label="Experiment 28" from="blocked" to="reconciled" tone="lime" /></div><div className="revision-footer"><span><Icon name="check" size={14} />3 dependent assumptions repaired</span><span>operator · just now</span></div></div></div><div className="secondary-bottom"><ActivityPanel state={state} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
+  return <div className="secondary-page"><SecondaryHero eyebrow="ASYNC EXPECTATIONS" title="The agent keeps time for you." body="Every procedural step has a due window, a next expected state, and a wake-up path when evidence does not arrive." status="Pub/Sub connected" tone="good" /><div className="automation-grid"><div className="automation-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Active automations</span><h2>Expected transitions</h2></div><StatusBadge tone="good" icon={false}>3 running</StatusBadge></div><AutomationRow label="A17 · centrifuge" detail="expected in 20 min" state="scheduled" tone="blue" /><AutomationRow label="PX-9 · replenish" detail="when level drops below 20%" state="watching" tone="yellow" /><AutomationRow label="Experiment 28 · archive" detail="after verification passes" state="armed" tone="lime" /></div><div className="automation-console"><div className="console-orbit"><span>20:00</span><i /><i /><i /></div><span className="panel-kicker">NEXT WAKE-UP</span><h2>14:51 IST</h2><p>Pub/Sub will wake the agent, check for new evidence, and reopen the exact task—not a generic inbox.</p><button className="primary-button full-button" onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={15} /> Simulate wake-up</button></div></div><div className="automation-log"><div className="secondary-card-heading"><div><span className="panel-kicker">Trigger log</span><h2>What the agent does while you’re away</h2></div><span className="plan-id">append-only</span></div><AutomationLogRow time="14:31" title="A17 state recorded" detail="washed · next expected centrifuge" /><AutomationLogRow time="14:31" title="Wake-up scheduled" detail="topic: groundstate-follow-ups" /><AutomationLogRow time={state.phase === "overdue" ? "15:13" : "—"} title={state.phase === "overdue" ? "No evidence found" : "Waiting for due window"} detail={state.phase === "overdue" ? "task reopened · operator attention required" : "the world is still on schedule"} alert={state.phase === "overdue"} /></div><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div>;
+}
+
+function SecondaryHero({ eyebrow, title, body, status, tone }) {
+  return <section className="secondary-hero"><div><div className="eyebrow"><span className="eyebrow-line" />{eyebrow}</div><h1>{title}</h1><p>{body}</p></div><StatusBadge tone={tone}>{status}</StatusBadge></section>;
+}
+
+function MiniBenchMap({ phase }) {
+  const centrifugeLabel = ["diff", "confirmed"].includes(phase) ? "running" : "idle";
+  return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-node mini-node-a"><b>A17</b><span>{phase === "diff" || phase === "overdue" ? "missing" : "washed"}</span></div><div className="mini-map-node mini-node-b"><b>B02</b><span>{phase === "corrected" ? "spinning" : "rack 7"}</span></div><div className="mini-map-node mini-node-c"><b>C-01</b><span>{centrifugeLabel}</span></div><div className="mini-map-node mini-node-p"><b>PX-9</b><span>40%</span></div><svg viewBox="0 0 700 230" preserveAspectRatio="none" aria-hidden="true"><path d="M90 119 C185 109 246 66 345 78 S482 70 595 45" /><path d="M90 119 C188 145 238 183 350 154 S478 166 602 191" /></svg><span className="mini-map-caption">camera anchor map · confidence 0.96</span></div>;
+}
+
+function TrackedEntity({ label, detail, tone }) {
+  return <div className="tracked-entity"><span className={`tracked-dot tracked-${tone}`} /><span><strong>{label}</strong><small>{detail}</small></span><Icon name="chevron" size={13} /></div>;
+}
+
+function RevisionStackRow({ number, label, tone, active }) {
+  return <div className={`revision-stack-row ${active ? "stack-active" : ""}`}><span className={`stack-dot stack-${tone}`} /><span><b>#{number}</b><small>{label}</small></span><Icon name="chevron" size={13} /></div>;
+}
+
+function AutomationRow({ label, detail, state, tone }) {
+  return <div className="automation-row"><span className={`automation-dot automation-${tone}`} /><span><strong>{label}</strong><small>{detail}</small></span><StatusBadge tone={tone === "yellow" ? "warn" : "good"} icon={false}>{state}</StatusBadge></div>;
+}
+
+function AutomationLogRow({ time, title, detail, alert }) {
+  return <div className={`automation-log-row ${alert ? "log-alert" : ""}`}><span className="automation-time">{time}</span><span className="automation-log-dot" /><span><strong>{title}</strong><small>{detail}</small></span></div>;
 }
 
 function getDiffRows(phase) {
