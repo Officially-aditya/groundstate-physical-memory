@@ -5,6 +5,7 @@ Groundstate is “Git for the Physical World”: a persistent memory agent for a
 This project is built for the **Collaborative Partner** track of the **All Things Agentic Hackathon**. The agent leads the operator through a clarification, records the correction, and adapts the downstream world state instead of silently overwriting history.
 
 **Live demo:** https://officially-aditya.github.io/groundstate-physical-memory/  
+**Cloud Run runtime:** https://groundstate-196727476983.us-central1.run.app  
 **Source:** https://github.com/Officially-aditya/groundstate-physical-memory
 
 ## Demo loop
@@ -14,7 +15,7 @@ This project is built for the **Collaborative Partner** track of the **All Thing
 3. Choose **Confirm A17** or **It’s B02** to see how clarification or correction propagates through the revision log.
 4. Use **Fast-forward 20 min** to wake the autonomous follow-up and reopen the overdue action.
 
-The browser experience is intentionally deterministic and cost-safe. It is a faithful replay of the decision surface, so a judge can understand the product without credentials or a live camera.
+The browser experience is a replayable decision surface, and its public Pages build is wired to the Cloud Run runtime above. Without a photo it stays inexpensive; adding a photo or voice observation calls the live `/api/observe` endpoint.
 
 ## Google runtime
 
@@ -24,7 +25,7 @@ The Cloud Run-friendly runtime in `backend/` is the live integration path:
 - `google-cloud-firestore` persists temporal claims with provenance.
 - `google-cloud-pubsub` publishes expected-transition wake-ups for asynchronous follow-up.
 
-When Google credentials are absent, the same endpoints return a deterministic fixture. This keeps local development and the hosted replay inexpensive while leaving the production calls explicit and runnable.
+When Google credentials are absent, the same endpoints return a deterministic fixture. This keeps local development inexpensive while leaving the production calls explicit and runnable.
 
 ## Run locally
 
@@ -66,7 +67,7 @@ See [`docs/architecture.svg`](docs/architecture.svg) for the system diagram.
 ```text
 camera + voice + records
           ↓
-Gemini 3.5 Flash / Google GenAI SDK
+Gemini 3.5 Flash Lite / Google GenAI SDK
           ↓
 typed claim + evidence + confidence
           ↓

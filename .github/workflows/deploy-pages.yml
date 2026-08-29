@@ -29,6 +29,8 @@ jobs:
         run: npm ci
       - name: Build the static app
         run: npm run build
+        env:
+          VITE_RUNTIME_URL: https://groundstate-196727476983.us-central1.run.app
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -7,9 +7,10 @@ Groundstate
 ## Links
 
 - Hosted demo: https://officially-aditya.github.io/groundstate-physical-memory/
+- Cloud Run runtime: https://groundstate-196727476983.us-central1.run.app
 - Source repository: https://github.com/Officially-aditya/groundstate-physical-memory
 
-The GitHub Pages URL is the cost-safe replay. The repository also includes a Cloud Run-ready container that serves the same UI and API from one origin when the Google Cloud environment variables are configured.
+The GitHub Pages URL is the polished public UI and is configured to call the Cloud Run runtime for photo/voice observations. The repository also includes the same Cloud Run-ready container for reproducible judging.
 
 ## Elevator pitch
 
@@ -40,7 +41,7 @@ The production runtime in `backend/runtime.py` is the live integration path:
 - **Gemini 3.5 Flash Lite via Google GenAI SDK** receives a camera frame, operator voice note, and remembered world state, then returns a typed observation claim with confidence and contradiction status.
 - **Firestore** stores the temporal world graph: claims, evidence, revisions, and validity windows.
 - **Pub/Sub** receives expected-transition messages so the agent can wake asynchronously when a physical step should have happened.
-- The browser replay is a cost-safe deterministic fixture of the same decision surface. The Cloud Run build exposes `POST /api/observe`, which automatically switches to Gemini + Firestore + Pub/Sub when credentials are configured; without them it returns the same inspectable local claim contract.
+- The browser replay is a cost-safe deterministic fixture of the same decision surface. The public UI calls Cloud Run for live observations; its `POST /api/observe` path uses Gemini 3.5 Flash Lite, Firestore, and Pub/Sub in the configured project.
 
 ## What we learned
 
@@ -67,4 +68,4 @@ Add authenticated multi-user workspaces, use Firestore listeners for live graph 
 
 ## Built with
 
-React, Vite, JavaScript, CSS, Python, Google GenAI SDK, Gemini 3.5 Flash, Firestore, Pub/Sub.
+React, Vite, JavaScript, CSS, Python, Google GenAI SDK, Gemini 3.5 Flash Lite, Firestore, Pub/Sub.
