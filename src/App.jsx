@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { demoReducer, initialState } from "./stateMachine.js";
 
 const navItems = [
@@ -87,6 +87,10 @@ function App() {
   const [command, setCommand] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState("");
+  const [runtimeStatus, setRuntimeStatus] = useState("checking");
+  const [runtimeMessage, setRuntimeMessage] = useState("");
+  const evidenceInputRef = useRef(null);
+  const runtimeUrl = (import.meta.env.VITE_RUNTIME_URL || "").replace(/\/$/, "");
   const copy = phaseCopy[state.phase];
   const isDiff = ["diff", "overdue"].includes(state.phase);
   const diffRows = getDiffRows(state.phase);
@@ -104,6 +108,19 @@ function App() {
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${runtimeUrl}/api/health`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("replay")))
+      .then((health) => {
+        if (!cancelled) setRuntimeStatus(health.google_runtime_ready ? "google" : "local");
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeStatus("replay");
+      });
+    return () => { cancelled = true; };
+  }, [runtimeUrl]);
+
   const activeEntities = useMemo(() => entities.map((entity) => {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
     if (["confirmed", "overdue"].includes(state.phase) && entity.id === "A17") return { ...entity, detail: state.phase === "overdue" ? "awaiting centrifuge" : "centrifuging", tone: "lime" };
@@ -117,8 +134,34 @@ function App() {
     event.preventDefault();
     const cleanCommand = command.trim();
     if (!cleanCommand) return;
-    dispatch({ type: "LOG_NOTE", note: `“${cleanCommand}” added to the world log.` });
+    void sendObservation(cleanCommand).then((claim) => {
+      dispatch({ type: "LOG_NOTE", note: claim ? `“${cleanCommand}” grounded as ${claim.entity_id} → ${claim.next_expected_state}.` : `“${cleanCommand}” added to the world log.` });
+    });
     setCommand("");
+  }
+
+  async function sendObservation(voiceNote, imageDataUrl = "") {
+    try {
+      const response = await fetch(`${runtimeUrl}/api/observe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice_note: voiceNote, image_data_url: imageDataUrl, world_state: { snapshot: state.snapshot, phase: state.phase }, due_at: "14:51" }) });
+      if (!response.ok) throw new Error("runtime unavailable");
+      const claim = await response.json();
+      setRuntimeStatus(claim.persistence?.store === "firestore" ? "google" : "local");
+      setRuntimeMessage(`${claim.entity_id} → ${claim.next_expected_state} · ${claim.persistence?.store || "local replay"}`);
+      return claim;
+    } catch {
+      setRuntimeMessage("Replay claim ready · no cloud credentials required");
+      return null;
+    }
+  }
+
+  function handleEvidenceFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      void sendObservation("Bench photo attached to the current observation.", reader.result).then(() => dispatch({ type: "SCAN" }));
+    };
+    reader.readAsDataURL(file);
   }
 
   function resetDemo() {
@@ -147,7 +190,7 @@ function App() {
 
         <div className="sidebar-section-label sidebar-section-label-spaced">Connected systems</div>
         <div className="system-list">
-          <div className="system-row"><span className="system-icon system-gemini">✦</span><span>Gemini vision</span><StatusBadge tone="good" icon={false}>live</StatusBadge></div>
+          <div className="system-row"><span className="system-icon system-gemini">✦</span><span>Gemini vision</span><StatusBadge tone={runtimeStatus === "google" ? "good" : "blue"} icon={false}>{runtimeStatus === "google" ? "live" : runtimeStatus === "checking" ? "…" : "replay"}</StatusBadge></div>
           <div className="system-row"><span className="system-icon system-fire">◌</span><span>Firestore graph</span><span className="system-pulse" /></div>
           <div className="system-row"><span className="system-icon system-pub">↗</span><span>Pub/Sub triggers</span><span className="system-pulse" /></div>
         </div>
@@ -193,7 +236,7 @@ function App() {
             <div className="bench-card panel-card">
               <div className="panel-heading">
                 <div><div className="panel-kicker">Spatial memory</div><h2>Current world</h2></div>
-                <button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Scan bench</button>
+                <div className="bench-actions"><input ref={evidenceInputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handleEvidenceFile} /><button className="ghost-button" onClick={() => evidenceInputRef.current?.click()}><Icon name="plus" size={15} /> Add photo</button><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Replay scan</button></div>
               </div>
               <div className="bench-stage">
                 <div className="stage-topline"><span>BENCH / 04</span><span className="stage-coordinate">24.592° N&nbsp;&nbsp;73.712° E <span className="coordinate-dot" /></span></div>
@@ -207,7 +250,7 @@ function App() {
                 <div className="stage-center"><span className="center-ring" /><span className="center-label">origin<br /><strong>O4</strong></span></div>
                 <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> 7 anchors</span></div>
               </div>
-              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />last observation {state.time} · camera + voice</span><span>confidence <strong>{state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
+              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />last observation {state.time} · camera + voice</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : "replay runtime")} · confidence <strong>{state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
             </div>
 
             <AgentQueue state={state} dispatch={dispatch} />

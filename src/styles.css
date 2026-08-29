@@ -92,3 +92,4 @@ button { cursor: pointer; }
 
 @media (max-width: 1060px) { .secondary-bench-grid, .revision-page-grid, .automation-grid { grid-template-columns: 1fr; }.revision-index-card { min-height: 300px; }.revision-stack { margin-top: 32px; } }
 @media (max-width: 720px) { .sidebar { height: auto; max-height: none; overflow: visible; }.secondary-hero { align-items: flex-start; flex-direction: column; padding-top: 0; }.secondary-hero > .status-badge { margin-bottom: 0; }.secondary-bottom { grid-template-columns: 1fr; }.back-link { justify-self: start; margin-top: 3px; }.mini-bench-map { height: 290px; }.automation-console { min-height: 345px; } }
+.bench-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
