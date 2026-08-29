@@ -63,6 +63,22 @@ test("live workspace starts without seeded demo records", () => {
   assert.deepEqual(actualInitialState.evidence, []);
 });
 
+test("live evidence keeps the state graph claim-specific", () => {
+  const claim = { entity_id: "tank-3", observed_state: "open", next_expected_state: "sealed", confidence: 0.84 };
+  const next = demoReducer(actualInitialState, {
+    type: "ADD_EVIDENCE",
+    claim,
+    note: "The vessel is open.",
+    observedAt: "just now",
+    evidence: { id: "live-evidence", label: "operator note", detail: "voice note · just now", status: "processed" },
+  });
+  assert.equal(next.mode, "actual");
+  assert.equal(next.latestClaim.entity_id, "tank-3");
+  assert.equal(next.projects[0].entities, 1);
+  assert.equal(next.projects[0].next, "Review sealed");
+  assert.notEqual(next.projects[0].entities, 7);
+});
+
 test("mode switching can load a separate workspace state", () => {
   const next = demoReducer(actualInitialState, { type: "LOAD_WORKSPACE", state: initialState });
   assert.equal(next.activeProjectId, "experiment-28");

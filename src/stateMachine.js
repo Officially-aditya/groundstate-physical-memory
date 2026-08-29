@@ -1,4 +1,5 @@
 export const initialState = {
+  mode: "demo",
   phase: "baseline",
   snapshot: 17,
   time: "14:31",
@@ -14,9 +15,11 @@ export const initialState = {
     { id: "evidence-17", projectId: "experiment-28", label: "Bench scan #17", detail: "camera + voice · 14:31", status: "processed" },
     { id: "evidence-16", projectId: "experiment-28", label: "Experiment 28 opened", detail: "lab record · 14:22", status: "linked" },
   ],
+  latestClaim: null,
 };
 
 export const actualInitialState = {
+  mode: "actual",
   phase: "baseline",
   snapshot: 0,
   time: "—",
@@ -27,6 +30,7 @@ export const actualInitialState = {
     { id: "workspace-default", name: "My workspace", location: "Add a location", status: "ready", entities: 0, revisions: 0, next: "Add first evidence" },
   ],
   evidence: [],
+  latestClaim: null,
 };
 
 export function demoReducer(state, action) {
@@ -69,14 +73,28 @@ export function demoReducer(state, action) {
         lastAction: "Operator note appended",
       };
     case "ADD_EVIDENCE":
-      return {
-        ...state,
-        evidence: [{ ...action.evidence, projectId: state.activeProjectId }, ...state.evidence],
-        projects: state.projects.map((project) => project.id === state.activeProjectId
-          ? { ...project, status: "active", entities: project.entities || 7, revisions: project.revisions + 1, next: "Review the semantic diff" }
-          : project),
-        lastAction: "Evidence attached to snapshot",
-      };
+      {
+        const isLive = state.mode === "actual";
+        const claim = action.claim || null;
+        return {
+          ...state,
+          snapshot: isLive ? Number(state.snapshot || 0) + 1 : state.snapshot,
+          time: isLive ? (action.observedAt || "just now") : state.time,
+          note: isLive ? (action.note || "Observation captured.") : state.note,
+          latestClaim: isLive ? claim : state.latestClaim,
+          evidence: [{ ...action.evidence, projectId: state.activeProjectId }, ...state.evidence],
+          projects: state.projects.map((project) => project.id === state.activeProjectId
+            ? {
+              ...project,
+              status: "active",
+              entities: isLive ? (claim?.entity_id ? 1 : project.entities) : (project.entities || 7),
+              revisions: project.revisions + 1,
+              next: isLive ? (claim?.next_expected_state ? `Review ${claim.next_expected_state}` : "Review grounded claim") : "Review the semantic diff",
+            }
+            : project),
+          lastAction: isLive ? "Observation claim appended" : "Evidence attached to snapshot",
+        };
+      }
     case "SELECT_PROJECT":
       return {
         ...state,
@@ -85,6 +103,7 @@ export function demoReducer(state, action) {
         snapshot: 17,
         time: "14:31",
         note: "A17 is prepared for the next step.",
+        latestClaim: state.mode === "actual" ? null : state.latestClaim,
         lastAction: "Project selected",
       };
     case "CREATE_PROJECT":
@@ -96,6 +115,7 @@ export function demoReducer(state, action) {
         snapshot: 1,
         time: "—",
         note: "Add the first photo or operator note to start the project.",
+        latestClaim: null,
         lastAction: "Project created",
       };
     case "RESET_SNAPSHOT": {

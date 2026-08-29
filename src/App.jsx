@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { actualInitialState, demoReducer, initialState } from "./stateMachine.js";
 
-const navItems = [
-  { label: "Overview", icon: "grid" },
-  { label: "Evidence inbox", icon: "inbox" },
-  { label: "Bench / 04", icon: "crosshair" },
-  { label: "Revisions", icon: "git" },
-  { label: "Automations", icon: "spark" },
-];
-
 const entities = [
   { id: "A17", kind: "sample", detail: "washed · rack 4", tone: "lime", position: "entity-a17" },
   { id: "B02", kind: "sample", detail: "prepared · rack 7", tone: "coral", position: "entity-b02" },
@@ -52,6 +44,23 @@ const phaseCopy = {
     description: "The agent woke on its own, checked the expected transition, and reopened the exact task that needs attention.",
     status: "Action overdue",
     statusTone: "warn",
+  },
+};
+
+const actualCopy = {
+  ready: {
+    eyebrow: "READY FOR INPUT",
+    title: "Make the next state visible.",
+    description: "Groundstate turns a camera frame or operator note into a claim you can inspect before it changes the project record.",
+    status: "Ready for evidence",
+    statusTone: "blue",
+  },
+  captured: {
+    eyebrow: "OBSERVATION CAPTURED",
+    title: "A claim is ready to inspect.",
+    description: "Your evidence is attached to this project. Review the grounded claim, then capture again when the physical state changes.",
+    status: "Claim ready",
+    statusTone: "blue",
   },
 };
 
@@ -125,10 +134,14 @@ function App() {
   const [newProjectLocation, setNewProjectLocation] = useState("");
   const runtimeUrl = (import.meta.env.VITE_RUNTIME_URL || "").replace(/\/$/, "");
   const activeProject = state.projects.find((project) => project.id === state.activeProjectId) ?? state.projects[0];
-  const copy = phaseCopy[state.phase];
+  const projectEvidence = state.evidence.filter((evidence) => evidence.projectId === activeProject?.id);
+  const hasEvidence = projectEvidence.length > 0;
+  const isLive = mode === "actual";
+  const copy = isLive ? (hasEvidence ? actualCopy.captured : actualCopy.ready) : phaseCopy[state.phase];
   const isDiff = ["diff", "overdue"].includes(state.phase);
-  const isNewProject = activeProject.entities === 0;
-  const diffRows = getDiffRows(isNewProject && state.phase === "baseline" ? "new" : state.phase);
+  const isNewProject = isLive ? !hasEvidence : activeProject.entities === 0;
+  const liveEntityCount = isLive ? (state.latestClaim?.entity_id ? 1 : hasEvidence ? 1 : 0) : activeProject.entities;
+  const diffRows = getDiffRows(isLive ? (hasEvidence ? "captured" : "new") : isNewProject && state.phase === "baseline" ? "new" : state.phase, state.latestClaim);
   const currentLocation = activeNav === "Overview" ? activeProject.location : activeNav;
 
   useEffect(() => {
@@ -161,7 +174,7 @@ function App() {
     window.localStorage.setItem(`groundstate-workspace-${mode}-v1`, JSON.stringify({ activeProjectId: state.activeProjectId, projects: state.projects, evidence: state.evidence }));
   }, [mode, state.activeProjectId, state.projects, state.evidence]);
 
-  const activeEntities = useMemo(() => (isNewProject ? [] : entities).map((entity) => {
+  const activeEntities = useMemo(() => (isLive || isNewProject ? [] : entities).map((entity) => {
     if (state.phase === "diff" && entity.id === "A17") return { ...entity, detail: "not located", tone: "muted" };
     if (["confirmed", "overdue"].includes(state.phase) && entity.id === "A17") return { ...entity, detail: state.phase === "overdue" ? "awaiting centrifuge" : "centrifuging", tone: "lime" };
     if (state.phase === "corrected" && entity.id === "B02") return { ...entity, detail: "centrifuging", tone: "coral" };
@@ -186,7 +199,7 @@ function App() {
       if (!response.ok) throw new Error("runtime unavailable");
       const claim = await response.json();
       setRuntimeStatus(claim.persistence?.store === "firestore" ? "google" : "local");
-      setRuntimeMessage(`${claim.entity_id} → ${claim.next_expected_state} · ${claim.persistence?.store || "local replay"}`);
+      setRuntimeMessage(`${claim.entity_id} → ${claim.next_expected_state} · ${claim.persistence?.store || (mode === "demo" ? "fixture" : "local")}`);
       return claim;
     } catch {
       setRuntimeMessage(mode === "demo" ? "Replay claim ready · no cloud credentials required" : "Local claim ready · cloud runtime unavailable");
@@ -212,7 +225,7 @@ function App() {
     const note = evidenceNote.trim() || (evidenceFile ? "Bench photo attached to the current observation." : "Observe the current workbench and reconcile it with the project memory.");
     setCaptureBusy(true);
     const claim = await sendObservation(note, evidencePreview);
-    dispatch({ type: "ADD_EVIDENCE", evidence: { id: `evidence-${Date.now()}`, label: evidenceFile?.name || "Operator observation", detail: `${evidenceFile ? "photo + voice" : "voice note"} · just now`, status: "processed" } });
+    dispatch({ type: "ADD_EVIDENCE", claim, note, observedAt: "just now", evidence: { id: `evidence-${Date.now()}`, label: evidenceFile?.name || "Operator observation", detail: `${evidenceFile ? "photo + voice" : "voice note"} · just now`, status: "processed" } });
     dispatch({ type: "SCAN" });
     if (claim) dispatch({ type: "LOG_NOTE", note: `“${note}” grounded as ${claim.entity_id} → ${claim.next_expected_state}.` });
     setCaptureBusy(false);
@@ -264,7 +277,7 @@ function App() {
 
   const commandActions = mode === "demo"
     ? [{ label: "Scan bench", detail: "Create the next semantic snapshot", icon: "scan", run: () => dispatch({ type: "SCAN" }) }, { label: "Fast-forward 20 min", detail: "Wake the expected-transition agent", icon: "clock", run: () => dispatch({ type: "ADVANCE_TIME" }) }, { label: "Reset snapshot", detail: "Return to the clean baseline", icon: "rotate", run: resetDemo }]
-    : [{ label: "Capture evidence", detail: "Add a photo or operator note to this workspace", icon: "camera", run: () => setCaptureOpen(true) }, { label: "Open evidence inbox", detail: "Review project captures and their provenance", icon: "inbox", run: () => setActiveNav("Evidence inbox") }, { label: "Open projects", detail: "Create or switch physical workspaces", icon: "folder", run: () => setActiveNav("Projects") }];
+    : [{ label: "Capture evidence", detail: "Add a photo or operator note to this project", icon: "camera", run: () => setCaptureOpen(true) }, { label: "Open evidence inbox", detail: "Review project captures and their provenance", icon: "inbox", run: () => setActiveNav("Evidence inbox") }, { label: "Open projects", detail: "Create or switch physical projects", icon: "folder", run: () => setActiveNav("Projects") }];
 
   return (
     <div className="app-frame">
@@ -273,16 +286,6 @@ function App() {
           <div className="brand-mark"><span /><span /><span /></div>
           <div><div className="brand-name">groundstate</div><div className="brand-subtitle">physical memory, made legible</div></div>
         </div>
-
-        <nav className="primary-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
-            <button className={`nav-item ${activeNav === item.label ? "nav-active" : ""}`} key={item.label} aria-current={activeNav === item.label ? "page" : undefined} onClick={() => setActiveNav(item.label)}>
-              <Icon name={item.icon} size={17} />
-              <span>{item.label === "Bench / 04" && mode === "actual" ? "Current surface" : item.label}</span>
-              {((item.label === "Evidence inbox" && state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length > 0) || (item.label === "Revisions" && (mode === "demo" || activeProject.revisions > 0))) && <span className="nav-count">{item.label === "Evidence inbox" ? String(state.evidence.filter((evidence) => evidence.projectId === activeProject.id).length).padStart(2, "0") : activeProject.revisions}</span>}
-            </button>
-          ))}
-        </nav>
 
         <div className="sidebar-section-label sidebar-section-label-spaced">Connected systems</div>
         <div className="system-list">
@@ -303,15 +306,15 @@ function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{activeNav === "Bench / 04" && mode === "actual" ? "Current surface" : currentLocation}</span><span className="breadcrumb-live"><span />LIVE</span></div>
+          <div className="breadcrumb"><span className="breadcrumb-muted">{activeProject.name}</span><Icon name="chevron" size={13} /><span>{activeNav === "Bench / 04" && mode === "actual" ? "Current surface" : currentLocation}</span><span className="breadcrumb-live"><span />{mode === "demo" ? "FIXTURE" : "LIVE"}</span></div>
           <div className="topbar-actions"><span className={`runtime-chip runtime-${runtimeStatus}`}><span />{runtimeStatus === "google" ? "Cloud runtime live" : runtimeStatus === "checking" ? "Connecting" : mode === "demo" ? "Replay mode" : "Local fallback"}</span><button className="icon-button" title="Open command palette" aria-label="Open command palette" onClick={() => setCommandOpen(true)}><Icon name="command" size={17} /></button><button className="avatar avatar-small">AM</button></div>
         </header>
 
         <div className="content-wrap">
           <ProjectRepositoryBar project={activeProject} state={state} mode={mode} activeNav={activeNav} onNavigate={setActiveNav} onCapture={() => setCaptureOpen(true)} onModeChange={switchMode} />
           {activeNav === "Overview" && <>
-            <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} mode={mode} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
-            <WorkflowPrompt phase={state.phase} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
+            <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} mode={mode} hasEvidence={hasEvidence} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
+            <WorkflowPrompt phase={state.phase} mode={mode} hasEvidence={hasEvidence} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
           <section className="hero-section">
             <div className="hero-copy">
               <div className="eyebrow"><span className="eyebrow-line" />{copy.eyebrow}</div>
@@ -325,7 +328,7 @@ function App() {
           </section>
 
           <section className="metrics-row" aria-label="Workspace metrics">
-            <Metric label="Entities tracked" value={String(activeProject.entities).padStart(2, "0")} delta={isNewProject ? "waiting for evidence" : "+2 this run"} tone="lime" />
+            <Metric label="Entities tracked" value={String(liveEntityCount).padStart(2, "0")} delta={isNewProject ? "waiting for evidence" : isLive ? "claim attached" : "+2 this run"} tone="lime" />
             <Metric label="World revisions" value={String(activeProject.revisions).padStart(2, "0")} delta={isNewProject ? "first claim pending" : "immutable log"} tone="blue" />
             <Metric label="Open assertions" value={isNewProject ? "00" : state.phase === "diff" ? "01" : state.phase === "overdue" ? "02" : "00"} delta={isNewProject ? "no claims yet" : state.phase === "baseline" ? "all reconciled" : "needs attention"} tone={isDiff ? "coral" : "cream"} />
             <Metric label="Agent uptime" value="99.8%" delta="last 30 days" tone="yellow" />
@@ -347,45 +350,46 @@ function App() {
                 <div className="surface-ruler ruler-y"><span>00</span><span>20</span><span>40</span><span>60</span></div>
                 {activeEntities.map((entity) => <EntityMarker key={entity.id} entity={entity} phase={state.phase} />)}
                 <div className="stage-center"><span className="center-ring" /><span className="center-label">origin<br /><strong>O4</strong></span></div>
-                <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> {activeProject.entities || 0} anchors</span></div>
+                {isLive && hasEvidence && <LiveObservationMarker claim={state.latestClaim || {}} />}
+                <div className="stage-footer"><span><i className="legend-dot legend-lime" />tracked</span><span><i className="legend-dot legend-coral" />attention</span><span><i className="legend-dot legend-blue" />inferred</span><span className="stage-footer-right"><Icon name="crosshair" size={13} /> {liveEntityCount} anchors</span></div>
               </div>
-              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />{isNewProject ? "no observation yet · ready for capture" : `last observation ${state.time} · camera + voice`}</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : mode === "demo" ? "replay runtime" : "local runtime")} · confidence <strong>{isNewProject ? "—" : state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
+              <div className="bench-bottom-line"><span><Icon name="clock" size={14} />{isNewProject ? "no observation yet · ready for capture" : isLive ? `observation ${state.time} · claim attached` : `last observation ${state.time} · camera + voice`}</span><span>{runtimeMessage || (runtimeStatus === "google" ? "cloud runtime connected" : mode === "demo" ? "fixture runtime" : "local runtime")} · confidence <strong>{isNewProject ? "—" : isLive ? (state.latestClaim?.confidence ?? "—") : state.phase === "diff" ? "0.71" : "0.96"}</strong></span></div>
             </div>
 
-            <AgentQueue state={state} project={activeProject} dispatch={dispatch} onOpenEvidence={() => setCaptureOpen(true)} />
+            <AgentQueue state={state} project={activeProject} mode={mode} dispatch={dispatch} onOpenEvidence={() => setCaptureOpen(true)} />
           </section>
 
           <section className="diff-card panel-card">
             <div className="diff-heading">
-              <div><div className="panel-kicker">Semantic diff</div><h2>{isNewProject ? "No snapshot yet — evidence starts the graph." : state.phase === "baseline" ? "Nothing is lost between snapshots." : state.phase === "corrected" ? "Revision #18 · dependent assumptions repaired" : state.phase === "confirmed" ? "Snapshot #18 · A17 confirmed" : state.phase === "overdue" ? "Snapshot #18 · expected transition overdue" : "Snapshot #17 → #18"}</h2></div>
+              <div><div className="panel-kicker">Semantic diff</div><h2>{isNewProject ? "No snapshot yet — evidence starts the graph." : isLive ? "Observation captured — claim ready for review." : state.phase === "baseline" ? "Nothing is lost between snapshots." : state.phase === "corrected" ? "Revision #18 · dependent assumptions repaired" : state.phase === "confirmed" ? "Snapshot #18 · A17 confirmed" : state.phase === "overdue" ? "Snapshot #18 · expected transition overdue" : "Snapshot #17 → #18"}</h2></div>
               <div className="diff-heading-actions"><span className="diff-source">{isNewProject ? "waiting for evidence" : "vision + voice + temporal graph"}</span><button className="icon-button icon-button-light"><Icon name="more" size={17} /></button></div>
             </div>
             <div className="diff-table">
               {diffRows.map((row) => <DiffRow key={row.label} {...row} />)}
             </div>
-            <div className="diff-footer"><div className="diff-footnote"><span className="confidence-bar"><span style={{ width: isNewProject ? "0%" : state.phase === "baseline" ? "96%" : state.phase === "diff" ? "71%" : "98%" }} /></span><span>{isNewProject ? "no inference yet" : "inference confidence"} <strong>{isNewProject ? "—" : state.phase === "baseline" ? "0.96" : state.phase === "diff" ? "0.71" : "0.98"}</strong></span></div><button className="text-button" onClick={() => setActiveNav("Revisions")}>Open revision graph <Icon name="arrow" size={15} /></button></div>
+            <div className="diff-footer"><div className="diff-footnote"><span className="confidence-bar"><span style={{ width: isNewProject ? "0%" : isLive ? `${Math.round(Number(state.latestClaim?.confidence || 0) * 100)}%` : state.phase === "baseline" ? "96%" : state.phase === "diff" ? "71%" : "98%" }} /></span><span>{isNewProject ? "no inference yet" : isLive ? "claim confidence" : "inference confidence"} <strong>{isNewProject ? "—" : isLive ? (state.latestClaim?.confidence ?? "—") : state.phase === "baseline" ? "0.96" : state.phase === "diff" ? "0.71" : "0.98"}</strong></span></div><button className="text-button" onClick={() => setActiveNav("Revisions")}>Open revision graph <Icon name="arrow" size={15} /></button></div>
           </section>
 
           <section className="lower-grid">
-            <RevisionTimeline state={state} project={activeProject} />
-            <ActivityPanel state={state} project={activeProject} />
+            <RevisionTimeline state={state} project={activeProject} mode={mode} />
+            <ActivityPanel state={state} project={activeProject} mode={mode} />
           </section>
 
           <form className="command-dock" onSubmit={submitCommand}>
             <div className="command-icon"><Icon name="spark" size={17} /></div>
-            <input aria-label="Add an observation" value={command} onChange={(event) => setCommand(event.target.value)} placeholder={mode === "demo" ? "Tell Groundstate what changed…" : "Add a note to this workspace…"} />
+            <input aria-label="Add an observation" value={command} onChange={(event) => setCommand(event.target.value)} placeholder={mode === "demo" ? "Tell Groundstate what changed…" : "Add a note to this project…"} />
             {mode === "demo" && <div className="command-suggestions"><button type="button" onClick={() => setCommand("A17 has been washed")}>A17 has been washed</button><button type="button" onClick={() => setCommand("Reagent moved to shelf B")}>Reagent moved…</button></div>}
             <button className="command-submit" type="submit" aria-label="Add observation"><Icon name="arrow" size={17} /></button>
           </form>
-          {mode === "demo" ? <div className="demo-controls"><span>Interactive replay</span><button onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={13} /> Fast-forward 20 min</button><button onClick={resetDemo}><Icon name="rotate" size={13} /> Reset snapshot</button><span className="demo-hint">Try: scan → clarify → correct</span></div> : <div className="workspace-footer"><span><span className="live-pulse" />Live workspace · evidence is scoped to this project</span><span>Local changes persist in this browser</span></div>}
+          {mode === "demo" ? <div className="demo-controls"><span>Interactive replay</span><button onClick={() => dispatch({ type: "ADVANCE_TIME" })}><Icon name="clock" size={13} /> Fast-forward 20 min</button><button onClick={resetDemo}><Icon name="rotate" size={13} /> Reset snapshot</button><span className="demo-hint">Try: scan → clarify → correct</span></div> : <div className="workspace-footer"><span><span className="live-pulse" />Live project · evidence is scoped to this project</span><span>Local changes persist in this browser</span></div>}
           </>}
-          {activeNav === "Evidence inbox" && <EvidenceInboxPage state={state} project={activeProject} onCapture={() => setCaptureOpen(true)} onNavigate={setActiveNav} />}
+          {activeNav === "Evidence inbox" && <EvidenceInboxPage state={state} project={activeProject} mode={mode} onCapture={() => setCaptureOpen(true)} onNavigate={setActiveNav} />}
           {activeNav === "Projects" && <ProjectsPage state={state} onCreate={() => setProjectModalOpen(true)} onSelect={selectProject} />}
           {["Bench / 04", "Revisions", "Automations"].includes(activeNav) && <SecondaryPage view={activeNav} mode={mode} project={activeProject} state={state} dispatch={dispatch} onNavigate={setActiveNav} />}
         </div>
-        {captureOpen && <EvidenceCaptureModal file={evidenceFile} preview={evidencePreview} note={evidenceNote} setNote={setEvidenceNote} onFile={handleEvidenceFile} onClose={closeCapture} onSubmit={runCapture} busy={captureBusy} runtimeStatus={runtimeStatus} runtimeMessage={runtimeMessage} />}
+        {captureOpen && <EvidenceCaptureModal file={evidenceFile} preview={evidencePreview} note={evidenceNote} setNote={setEvidenceNote} onFile={handleEvidenceFile} onClose={closeCapture} onSubmit={runCapture} busy={captureBusy} runtimeStatus={runtimeStatus} runtimeMessage={runtimeMessage} mode={mode} />}
         {projectModalOpen && <ProjectModal name={newProjectName} location={newProjectLocation} setName={setNewProjectName} setLocation={setNewProjectLocation} onClose={() => setProjectModalOpen(false)} onSubmit={createProject} />}
-        {commandOpen && <CommandPalette search={commandSearch} setSearch={setCommandSearch} close={() => { setCommandOpen(false); setCommandSearch(""); }} actions={commandActions} />}
+        {commandOpen && <CommandPalette search={commandSearch} setSearch={setCommandSearch} close={() => { setCommandOpen(false); setCommandSearch(""); }} actions={commandActions} mode={mode} />}
       </main>
     </div>
   );
@@ -393,22 +397,23 @@ function App() {
 
 function ProjectRepositoryBar({ project, state, mode, activeNav, onNavigate, onCapture, onModeChange }) {
   const evidenceCount = state.evidence.filter((item) => item.projectId === project?.id).length;
-  const activeTab = activeNav === "Evidence inbox" ? "Evidence" : activeNav === "Revisions" ? "World log" : activeNav === "Automations" ? "Automations" : "Overview";
-  const tabs = [["Overview", "Overview", ""], ["Evidence", "Evidence inbox", evidenceCount ? String(evidenceCount).padStart(2, "0") : ""], ["World log", "Revisions", project?.revisions ? String(project.revisions) : ""], ["Automations", "Automations", ""]];
+  const activeTab = activeNav === "Evidence inbox" ? "Evidence" : activeNav === "Bench / 04" ? "Surface" : activeNav === "Revisions" ? "World log" : activeNav === "Automations" ? "Automations" : "Overview";
+  const tabs = [["Overview", "Overview", ""], ["Evidence", "Evidence inbox", evidenceCount ? String(evidenceCount).padStart(2, "0") : ""], ["Surface", "Bench / 04", ""], ["World log", "Revisions", project?.revisions ? String(project.revisions) : ""], ["Automations", "Automations", ""]];
   return <section className="repository-bar"><div className="repository-bar-main"><div className="repository-identity"><span className="repository-mark">gs</span><div><div className="repository-path">{mode === "demo" ? "demo / groundstate" : "physical memory / groundstate"}</div><h2>{project?.name}</h2><div className="repository-meta"><span>{project?.location}</span><span className="repository-pill">{mode === "demo" ? "fixture" : "state graph"}</span><span className="repository-sync"><i />{mode === "demo" ? "deterministic replay" : state.phase === "diff" ? "review required" : project?.entities ? "synced" : "ready for evidence"}</span></div></div></div><div className="repository-actions"><div className="mode-toggle" role="tablist" aria-label="Product mode"><button className={mode === "actual" ? "mode-active" : ""} onClick={() => onModeChange("actual")} role="tab" aria-selected={mode === "actual"}><Icon name="folder" size={12} /> Workspace</button><button className={mode === "demo" ? "mode-active" : ""} onClick={() => onModeChange("demo")} role="tab" aria-selected={mode === "demo"}><Icon name="spark" size={12} /> Demo replay</button></div><button className="repo-ghost-button" onClick={() => onNavigate("Projects")}><Icon name="folder" size={14} /> Projects</button><button className="repo-primary-button" onClick={onCapture}><Icon name="camera" size={14} /> Capture evidence</button></div></div><nav className="repository-tabs" aria-label="Project sections">{tabs.map(([label, nav, count]) => <button key={label} className={activeTab === label ? "repository-tab-active" : ""} onClick={() => onNavigate(nav)}>{label}{count && <span>{count}</span>}</button>)}</nav></section>;
 }
 
-function WorkflowHeader({ project, phase, copy, mode, onCapture, onScan }) {
-  const currentStep = { baseline: 1, diff: 2, confirmed: 3, corrected: 3, overdue: 4 }[phase] ?? 1;
-  const stateLabel = phase === "baseline" ? "ready for evidence" : phase === "diff" ? "needs your decision" : phase === "overdue" ? "follow-up overdue" : "state reconciled";
+function WorkflowHeader({ project, phase, copy, mode, hasEvidence, onCapture, onScan }) {
+  const liveCaptured = mode === "actual" && hasEvidence;
+  const currentStep = liveCaptured ? 2 : ({ baseline: 1, diff: 2, confirmed: 3, corrected: 3, overdue: 4 }[phase] ?? 1);
+  const stateLabel = liveCaptured ? "claim ready for review" : phase === "baseline" ? "ready for evidence" : phase === "diff" ? "needs your decision" : phase === "overdue" ? "follow-up overdue" : "state reconciled";
   return <section className="workflow-header">
     <div className="workflow-header-main">
       <div className="workflow-title-meta"><span className="eyebrow"><span className="eyebrow-line" />PHYSICAL MEMORY / {project.name}</span><StatusBadge tone={phase === "diff" || phase === "overdue" ? "warn" : "good"}>{stateLabel}</StatusBadge></div>
-      <h1>{phase === "baseline" ? "Make the next state visible." : copy.title}</h1>
+      <h1>{liveCaptured ? "A claim is ready to inspect." : phase === "baseline" ? "Make the next state visible." : copy.title}</h1>
       <p>Groundstate turns camera frames and operator notes into an evidence-backed physical state you can inspect, correct, and hand back to an agent.</p>
       <div className="workflow-header-actions"><button className="primary-button" onClick={onCapture}><Icon name="camera" size={16} /> Capture evidence <Icon name="arrow" size={15} /></button>{mode === "demo" && <button className="secondary-button" onClick={onScan}><Icon name="scan" size={15} /> Replay sample scan</button>}</div>
     </div>
-    <div className="workflow-state-card"><div className="panel-kicker">CURRENT WORKFLOW</div><strong>{currentStep === 1 ? "Start with one observation" : currentStep === 2 ? "Review the contradiction" : currentStep === 3 ? "Seal the corrected state" : "Check the overdue transition"}</strong><p>{currentStep === 1 ? "A photo or operator note becomes the first claim in this project." : "The agent keeps its uncertainty visible until you choose what is true."}</p><span className="workflow-state-line"><i style={{ width: `${currentStep * 25}%` }} /></span><small>step {String(currentStep).padStart(2, "0")} / 04</small></div>
+    <div className="workflow-state-card"><div className="panel-kicker">CURRENT WORKFLOW</div><strong>{liveCaptured ? "Review the grounded claim" : currentStep === 1 ? "Start with one observation" : currentStep === 2 ? "Review the contradiction" : currentStep === 3 ? "Seal the corrected state" : "Check the overdue transition"}</strong><p>{liveCaptured ? "The evidence is attached to this project. Confirm what should happen next before scheduling follow-up." : currentStep === 1 ? "A photo or operator note becomes the first claim in this project." : "The agent keeps its uncertainty visible until you choose what is true."}</p><span className="workflow-state-line"><i style={{ width: `${currentStep * 25}%` }} /></span><small>step {String(currentStep).padStart(2, "0")} / 04</small></div>
     <WorkflowStepper currentStep={currentStep} />
   </section>;
 }
@@ -420,7 +425,7 @@ function WorkflowStepper({ currentStep }) {
   </div>;
 }
 
-function WorkflowPrompt({ phase, onCapture, onScan }) {
+function WorkflowPrompt({ phase, mode, hasEvidence, onCapture, onScan }) {
   const prompts = {
     baseline: { step: "01", label: "START HERE", title: "Capture the current bench", body: "Give Groundstate one photo, one voice note, or both. It will turn the evidence into a dated claim and show you what changed.", action: "Open evidence intake", icon: "camera", run: onCapture },
     diff: { step: "02", label: "YOUR TURN", title: "Resolve the contradiction", body: "The agent found a likely transition but will not silently rewrite the record. Review the evidence bundle on the right and choose the human anchor.", action: "Review evidence bundle", icon: "arrow", run: () => document.querySelector(".queue-card")?.scrollIntoView({ behavior: "smooth", block: "center" }) },
@@ -428,13 +433,16 @@ function WorkflowPrompt({ phase, onCapture, onScan }) {
     corrected: { step: "03", label: "REVISION APPLIED", title: "The correction traveled", body: "The old belief remains in history, while downstream assumptions now point at the corrected entity.", action: "Capture next state", icon: "camera", run: onCapture },
     overdue: { step: "04", label: "AGENT WAKE-UP", title: "Find evidence for the overdue step", body: "The expected transition did not arrive on time. Add a fresh observation to close the loop or keep the task open.", action: "Scan for evidence", icon: "scan", run: onScan },
   }[phase];
+  if (mode === "actual" && hasEvidence) {
+    return <section className="workflow-prompt prompt-captured"><div className="prompt-step">02</div><div className="prompt-copy"><span className="panel-kicker">CLAIM READY</span><h2>Review the grounded observation</h2><p>Your evidence is attached to this project. Inspect the claim before you capture the next change in the physical world.</p></div><button className="prompt-action" onClick={onCapture}><Icon name="camera" size={15} /> Capture next state</button></section>;
+  }
   return <section className={`workflow-prompt prompt-${phase}`}><div className="prompt-step">{prompts.step}</div><div className="prompt-copy"><span className="panel-kicker">{prompts.label}</span><h2>{prompts.title}</h2><p>{prompts.body}</p></div><button className="prompt-action" onClick={prompts.run}><Icon name={prompts.icon} size={15} /> {prompts.action}</button></section>;
 }
 
-function EvidenceInboxPage({ state, project, onCapture, onNavigate }) {
+function EvidenceInboxPage({ state, project, mode, onCapture, onNavigate }) {
   const projectEvidence = state.evidence.filter((item) => item.projectId === project?.id);
   const empty = projectEvidence.length === 0;
-  return <div className="secondary-page evidence-page"><SecondaryHero eyebrow="EVIDENCE INBOX" title="Bring the physical world in." body="Every photo and operator note becomes inspectable evidence before it changes the project memory." status={`${projectEvidence.length} evidence items`} tone="blue" /><div className="evidence-layout"><div className="evidence-intake-card"><div className="secondary-card-heading"><div><span className="panel-kicker">New observation</span><h2>Start a capture session</h2></div><span className="intake-shortcut">⌘ K</span></div><button className="upload-dropzone" onClick={onCapture}><span className="upload-mark"><Icon name="upload" size={20} /></span><span><strong>Upload a bench photo</strong><small>JPG, PNG · optional camera capture</small></span><Icon name="arrow" size={16} /></button><div className="intake-or"><span>or</span></div><div className="voice-note-preview"><span className="note-wave"><i /><i /><i /><i /><i /></span><span><strong>Add an operator note</strong><small>{empty ? "Start with a note about what is on the bench." : "A17 is washed and ready for the next step."}</small></span><button onClick={onCapture}>Add note</button></div><div className="evidence-contract"><span><Icon name="spark" size={14} /> Evidence contract</span><small>camera + voice → typed claim → human review</small></div></div><div className="recent-evidence-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Project evidence</span><h2>Recent captures</h2></div><StatusBadge tone="good" icon={false}>append-only</StatusBadge></div><div className={`evidence-list ${empty ? "evidence-list-empty" : ""}`}>{empty ? <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="upload" size={17} /></span><strong>No evidence in this project yet.</strong><small>Your first capture will appear here with its source, timestamp, and status.</small></div> : projectEvidence.map((item, index) => <EvidenceRow key={item.id} item={item} index={index} />)}</div>{!empty && <button className="text-button evidence-more" onClick={() => onNavigate("Revisions")}>View how evidence changed the record <Icon name="arrow" size={14} /></button>}</div></div><div className="evidence-next-step"><div><span className="panel-kicker">NEXT IN THIS PROJECT</span><strong>Capture → reconcile → approve → follow up</strong><small>The workflow is only complete when the next expected state is explicit.</small></div><button className="primary-button" onClick={onNavigate.bind(null, "Overview")}>Open active workflow <Icon name="arrow" size={15} /></button></div></div>;
+  return <div className="secondary-page evidence-page"><SecondaryHero eyebrow="EVIDENCE INBOX" title="Bring the physical world in." body="Every photo and operator note becomes inspectable evidence before it changes the project memory." status={`${projectEvidence.length} evidence items`} tone="blue" /><div className="evidence-layout"><div className="evidence-intake-card"><div className="secondary-card-heading"><div><span className="panel-kicker">New observation</span><h2>Start a capture session</h2></div><span className="intake-shortcut">⌘ K</span></div><button className="upload-dropzone" onClick={onCapture}><span className="upload-mark"><Icon name="upload" size={20} /></span><span><strong>Upload a bench photo</strong><small>JPG, PNG · optional camera capture</small></span><Icon name="arrow" size={16} /></button><div className="intake-or"><span>or</span></div><div className="voice-note-preview"><span className="note-wave"><i /><i /><i /><i /><i /></span><span><strong>Add an operator note</strong><small>{empty ? "Start with a note about what is on the bench." : mode === "demo" ? "A17 is washed and ready for the next step." : "Most recent observation is linked to this project."}</small></span><button onClick={onCapture}>Add note</button></div><div className="evidence-contract"><span><Icon name="spark" size={14} /> Evidence contract</span><small>camera + voice → typed claim → human review</small></div></div><div className="recent-evidence-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Project evidence</span><h2>Recent captures</h2></div><StatusBadge tone="good" icon={false}>append-only</StatusBadge></div><div className={`evidence-list ${empty ? "evidence-list-empty" : ""}`}>{empty ? <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="upload" size={17} /></span><strong>No evidence in this project yet.</strong><small>Your first capture will appear here with its source, timestamp, and status.</small></div> : projectEvidence.map((item, index) => <EvidenceRow key={item.id} item={item} index={index} />)}</div>{!empty && <button className="text-button evidence-more" onClick={() => onNavigate("Revisions")}>View how evidence changed the record <Icon name="arrow" size={14} /></button>}</div></div><div className="evidence-next-step"><div><span className="panel-kicker">NEXT IN THIS PROJECT</span><strong>Capture → reconcile → approve → follow up</strong><small>The workflow is only complete when the next expected state is explicit.</small></div><button className="primary-button" onClick={onNavigate.bind(null, "Overview")}>Open active workflow <Icon name="arrow" size={15} /></button></div></div>;
 }
 
 function EvidenceRow({ item, index }) {
@@ -446,9 +454,11 @@ function ProjectsPage({ state, onCreate, onSelect }) {
   return <div className="secondary-page projects-page"><SecondaryHero eyebrow="PROJECT MEMORY" title="Every workspace gets its own history." body="Projects keep observations, expected transitions, and revisions together—so a new bench never inherits the wrong reality." status={`${state.projects.length} projects`} tone="blue" /><div className="projects-layout"><div className="projects-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Your projects</span><h2>Workspaces</h2></div><button className="primary-button compact-button" onClick={onCreate}><Icon name="plus" size={14} /> New project</button></div><div className="projects-list">{state.projects.map((project) => <button className={`project-card ${project.id === state.activeProjectId ? "project-card-active" : ""}`} key={project.id} onClick={() => onSelect(project.id)}><span className="project-card-icon">{project.name.slice(0, 2).toUpperCase()}</span><span className="project-card-copy"><strong>{project.name}</strong><small>{project.location}</small></span><span className={`project-status status-${project.status}`}>{project.status}</span><span className="project-card-next">{project.next}</span><Icon name="chevron" size={14} /></button>)}</div></div><div className="project-detail-panel"><div className="project-detail-art"><span className="detail-art-grid" /><span className="detail-art-orbit" /><span className="detail-art-code">{selected.location.toUpperCase()}<br /><strong>{String(selected.entities).padStart(2, "0")}</strong> anchors</span></div><span className="panel-kicker">ACTIVE PROJECT</span><h2>{selected.name}</h2><p>{selected.id === "experiment-28" ? "A living record of the bench, its samples, and the transition the agent expects next." : "This project is ready for its first observation. Start with a photo or operator note."}</p><div className="project-stat-grid"><div><strong>{selected.entities}</strong><small>entities</small></div><div><strong>{selected.revisions}</strong><small>revisions</small></div><div><strong>{selected.status === "active" ? "LIVE" : "READY"}</strong><small>runtime</small></div></div><div className="project-next-action"><span className="panel-kicker">NEXT ACTION</span><strong>{selected.next}</strong><small>Every action updates this project’s world graph.</small></div><button className="primary-button full-button" onClick={() => onSelect(selected.id)}>{selected.entities ? "Open project workspace" : "Start project capture"} <Icon name="arrow" size={15} /></button></div></div></div>;
 }
 
-function EvidenceCaptureModal({ file, preview, note, setNote, onFile, onClose, onSubmit, busy, runtimeStatus, runtimeMessage }) {
+function EvidenceCaptureModal({ file, preview, note, setNote, onFile, onClose, onSubmit, busy, runtimeStatus, runtimeMessage, mode }) {
   const inputRef = useRef(null);
-  return <div className="modal-overlay" role="presentation" onMouseDown={onClose}><div className="capture-modal" role="dialog" aria-modal="true" aria-label="Add project evidence" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="panel-kicker">NEW OBSERVATION · PROJECT MEMORY</span><h2>What changed in the physical world?</h2><p>Attach evidence first. Groundstate will show its inference before it changes the record.</p></div><button className="modal-close" onClick={onClose} aria-label="Close evidence intake">Esc</button></div><div className="capture-form"><input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={onFile} /><button className={`capture-dropzone ${file ? "capture-dropzone-selected" : ""}`} onClick={() => inputRef.current?.click()}><span className="capture-drop-icon"><Icon name={file ? "check" : "upload"} size={22} /></span><span><strong>{file ? file.name : "Upload a bench photo"}</strong><small>{file ? `${Math.ceil(file.size / 1024)} KB · ready to analyze` : "PNG or JPG · camera capture supported"}</small></span><span className="capture-drop-arrow"><Icon name="arrow" size={15} /></span></button>{preview && <div className="capture-preview"><img src={preview} alt="Selected bench evidence preview" /><span>Evidence preview · not committed yet</span></div>}<label className="capture-note-label" htmlFor="operator-note"><span>Operator note <small>optional, but useful for identity</small></span><span className="note-counter">{note.length}/240</span></label><textarea id="operator-note" maxLength="240" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Example: A17 is washed and ready for the centrifuge…" /><div className="capture-suggestions"><button type="button" onClick={() => setNote("A17 is washed and ready for the centrifuge.")}>A17 is washed…</button><button type="button" onClick={() => setNote("The reagent moved to shelf B.")}>Reagent moved…</button><button type="button" onClick={() => setNote("Something changed on the bench.")}>Something changed…</button></div></div><div className="capture-footer"><span><i className={`runtime-dot runtime-dot-${runtimeStatus}`} />{runtimeMessage || (runtimeStatus === "google" ? "Gemini + Firestore + Pub/Sub connected" : "Replay-safe · no credentials required")}</span><div><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={onSubmit} disabled={busy}>{busy ? "Grounding…" : "Analyze evidence"} <Icon name="arrow" size={15} /></button></div></div></div></div>;
+  const isDemo = mode === "demo";
+  const suggestions = isDemo ? [["A17 is washed…", "A17 is washed and ready for the centrifuge."], ["Reagent moved…", "The reagent moved to shelf B."], ["Something changed…", "Something changed on the bench."]] : [["Machine state changed…", "The machine state changed; review the next expected step."], ["Location changed…", "The item moved to a new location."], ["Add a detail…", "Add the detail that will help identify this observation."]];
+  return <div className="modal-overlay" role="presentation" onMouseDown={onClose}><div className="capture-modal" role="dialog" aria-modal="true" aria-label="Add project evidence" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="panel-kicker">NEW OBSERVATION · PROJECT MEMORY</span><h2>What changed in the physical world?</h2><p>Attach evidence first. Groundstate will show its inference before it changes the record.</p></div><button className="modal-close" onClick={onClose} aria-label="Close evidence intake">Esc</button></div><div className="capture-form"><input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={onFile} /><button className={`capture-dropzone ${file ? "capture-dropzone-selected" : ""}`} onClick={() => inputRef.current?.click()}><span className="capture-drop-icon"><Icon name={file ? "check" : "upload"} size={22} /></span><span><strong>{file ? file.name : "Upload a bench photo"}</strong><small>{file ? `${Math.ceil(file.size / 1024)} KB · ready to analyze` : "PNG or JPG · camera capture supported"}</small></span><span className="capture-drop-arrow"><Icon name="arrow" size={15} /></span></button>{preview && <div className="capture-preview"><img src={preview} alt="Selected bench evidence preview" /><span>Evidence preview · not committed yet</span></div>}<label className="capture-note-label" htmlFor="operator-note"><span>Operator note <small>optional, but useful for identity</small></span><span className="note-counter">{note.length}/240</span></label><textarea id="operator-note" maxLength="240" value={note} onChange={(event) => setNote(event.target.value)} placeholder={isDemo ? "Example: A17 is washed and ready for the centrifuge…" : "Describe the change you want Groundstate to remember…"} /><div className="capture-suggestions">{suggestions.map(([label, value]) => <button key={label} type="button" onClick={() => setNote(value)}>{label}</button>)}</div></div><div className="capture-footer"><span><i className={`runtime-dot runtime-dot-${runtimeStatus}`} />{runtimeMessage || (runtimeStatus === "google" ? "Gemini + Firestore + Pub/Sub connected" : isDemo ? "Fixture-safe · no cloud credentials required" : "Local capture · evidence stays in this project")}</span><div><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={onSubmit} disabled={busy}>{busy ? "Grounding…" : "Analyze evidence"} <Icon name="arrow" size={15} /></button></div></div></div></div>;
 }
 
 function ProjectModal({ name, location, setName, setLocation, onClose, onSubmit }) {
@@ -459,9 +469,9 @@ function Metric({ label, value, delta, tone }) {
   return <div className="metric-card"><div className={`metric-orb orb-${tone}`} /><div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-delta">{delta}</div></div><Icon name="more" size={15} /></div>;
 }
 
-function CommandPalette({ search, setSearch, close, actions }) {
+function CommandPalette({ search, setSearch, close, actions, mode }) {
   const visibleActions = actions.filter((action) => `${action.label} ${action.detail}`.toLowerCase().includes(search.toLowerCase()));
-  return <div className="command-overlay" role="presentation" onMouseDown={close}><div className="command-palette" role="dialog" aria-modal="true" aria-label="Groundstate command center" onMouseDown={(event) => event.stopPropagation()}><div className="command-palette-top"><div><span className="command-palette-icon"><Icon name="spark" size={16} /></span><div><span className="panel-kicker">Groundstate command center</span><strong>Move through the replay</strong></div></div><button className="command-close" onClick={close} aria-label="Close command center">Esc</button></div><div className="command-search-wrap"><Icon name="command" size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a command…" /></div><div className="command-list">{visibleActions.length ? visibleActions.map((action) => <button key={action.label} className="command-item" onClick={() => { action.run(); close(); }}><span className="command-item-icon"><Icon name={action.icon} size={15} /></span><span><strong>{action.label}</strong><small>{action.detail}</small></span><Icon name="arrow" size={14} /></button>) : <div className="command-empty">No matching command. Try “scan” or “reset”.</div>}</div><div className="command-palette-footer"><span><kbd>⌘</kbd><kbd>K</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div></div></div>;
+  return <div className="command-overlay" role="presentation" onMouseDown={close}><div className="command-palette" role="dialog" aria-modal="true" aria-label="Groundstate command center" onMouseDown={(event) => event.stopPropagation()}><div className="command-palette-top"><div><span className="command-palette-icon"><Icon name="spark" size={16} /></span><div><span className="panel-kicker">Groundstate command center</span><strong>{mode === "demo" ? "Move through the replay" : "Act on the current project"}</strong></div></div><button className="command-close" onClick={close} aria-label="Close command center">Esc</button></div><div className="command-search-wrap"><Icon name="command" size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a command…" /></div><div className="command-list">{visibleActions.length ? visibleActions.map((action) => <button key={action.label} className="command-item" onClick={() => { action.run(); close(); }}><span className="command-item-icon"><Icon name={action.icon} size={15} /></span><span><strong>{action.label}</strong><small>{action.detail}</small></span><Icon name="arrow" size={14} /></button>) : <div className="command-empty">{mode === "demo" ? "No matching command. Try “scan” or “reset”." : "No matching action for this project."}</div>}</div><div className="command-palette-footer"><span><kbd>⌘</kbd><kbd>K</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div></div></div>;
 }
 
 function EmptyWorkspacePage({ view, project, onNavigate }) {
@@ -469,7 +479,18 @@ function EmptyWorkspacePage({ view, project, onNavigate }) {
   return <div className="secondary-page empty-workspace-page"><SecondaryHero eyebrow={isRevision ? "PROJECT HISTORY" : "PROJECT AUTOMATIONS"} title={isRevision ? "Your history starts with evidence." : "Automations appear after a next state exists."} body={isRevision ? "This live workspace has no claims yet. Once you capture the first observation, Groundstate will keep every change here." : "Groundstate only schedules follow-ups from observed work. Capture the first state, then define what should happen next."} status="waiting for first capture" tone="blue" /><div className="empty-workspace-card"><div className="empty-workspace-icon"><Icon name={isRevision ? "git" : "clock"} size={22} /></div><span className="panel-kicker">{project?.name}</span><h2>{isRevision ? "No revisions to show" : "No active automations"}</h2><p>{isRevision ? "There is nothing to reconcile until the workspace receives its first photo or operator note." : "A due window and expected transition will appear here after the first claim is grounded."}</p><button className="primary-button" onClick={() => onNavigate("Overview")}><Icon name="camera" size={15} /> Open capture workflow <Icon name="arrow" size={15} /></button></div></div>;
 }
 
-function SecondaryPage({ view, project, state, dispatch, onNavigate }) {
+function LiveSecondaryPage({ view, project, state, dispatch, onNavigate }) {
+  const evidence = state.evidence.filter((item) => item.projectId === project?.id);
+  const hasEvidence = evidence.length > 0;
+  const claim = state.latestClaim;
+  if (!hasEvidence && ["Revisions", "Automations"].includes(view)) return <EmptyWorkspacePage view={view} project={project} onNavigate={onNavigate} />;
+  if (view === "Bench / 04") return <div className="secondary-page"><SecondaryHero eyebrow="LIVE SPATIAL MEMORY" title={project?.location === "Add a location" ? "Name the surface when you are ready." : `${project?.location}, in the present tense.`} body="A grounded view of this project’s latest observation. New anchors appear here only after evidence is attached." status={hasEvidence ? "claim ready" : "ready for first capture"} tone={hasEvidence ? "good" : "blue"} /><div className="secondary-bench-grid"><div className="bench-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Spatial memory</span><h2>Observed surface</h2></div><button className="ghost-button" onClick={() => onNavigate("Overview")}><Icon name="camera" size={15} /> Capture again</button></div><MiniBenchMap phase={state.phase} empty={!hasEvidence} claim={claim || {}} /></div><div className="entity-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Tracked anchors</span><h2>{hasEvidence ? "Latest claim" : "No anchors yet"}</h2></div><StatusBadge tone={hasEvidence ? "good" : "blue"} icon={false}>{hasEvidence ? "ready" : "waiting"}</StatusBadge></div>{hasEvidence ? <div className="live-anchor-detail"><span className="tracked-dot tracked-blue" /><div><strong>{claim?.entity_id || "Observation"}</strong><small>{claim?.observed_state || "Evidence captured"}</small></div><Icon name="chevron" size={13} /></div> : <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="camera" size={16} /></span><strong>Waiting for the first observation.</strong><small>Capture evidence to create the first spatial anchor.</small></div>}<div className="secondary-note"><Icon name="clock" size={14} /><span>Next expected <strong>{claim?.next_expected_state || "first observation"}</strong><small>{claim?.next_expected_state ? "review before scheduling" : "not scheduled yet"}</small></span></div></div></div><div className="secondary-bottom"><RevisionTimeline state={state} project={project} mode="actual" /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
+  const isRevision = view === "Revisions";
+  return <div className="secondary-page empty-workspace-page"><SecondaryHero eyebrow={isRevision ? "PROJECT HISTORY" : "PROJECT AUTOMATIONS"} title={isRevision ? "The project log starts here." : "Follow-up is ready when the next state is clear."} body={isRevision ? "Groundstate keeps each observation and its evidence attached to the project so the record can be inspected later." : "The latest claim can supply an expected transition, but the operator remains in control of when to schedule it."} status={hasEvidence ? (isRevision ? "1 claim recorded" : claim?.next_expected_state ? "expectation found" : "no schedule yet") : "waiting for first capture"} tone={hasEvidence ? "good" : "blue"} /><div className="empty-workspace-card"><div className="empty-workspace-icon"><Icon name={isRevision ? "git" : "clock"} size={22} /></div><span className="panel-kicker">{project?.name}</span><h2>{isRevision ? "Latest observation is recorded" : claim?.next_expected_state || "No expected state yet"}</h2><p>{isRevision ? "The first claim is available in the evidence inbox and is ready for human review." : claim?.next_expected_state ? `Groundstate returned “${claim.next_expected_state}”. Review the claim before creating a follow-up.` : "Add a clearer next state to the next observation to make a follow-up actionable."}</p><button className="primary-button" onClick={() => onNavigate("Overview")}><Icon name="camera" size={15} /> Capture next observation <Icon name="arrow" size={15} /></button></div></div>;
+}
+
+function SecondaryPage({ view, mode, project, state, dispatch, onNavigate }) {
+  if (mode === "actual") return <LiveSecondaryPage view={view} project={project} state={state} dispatch={dispatch} onNavigate={onNavigate} />;
   if (project?.entities === 0 && ["Revisions", "Automations"].includes(view)) return <EmptyWorkspacePage view={view} project={project} onNavigate={onNavigate} />;
   if (view === "Bench / 04") return <div className="secondary-page"><SecondaryHero eyebrow="LIVE SPATIAL MEMORY" title={`${project?.location ?? "Bench / 04"}, in the present tense.`} body="A pinned view of the workspace as it exists now—plus the one transition the agent expects next." status={project?.entities === 0 ? "ready for first capture" : state.phase === "diff" ? "clarification pending" : "7 anchors synced"} tone={project?.entities === 0 ? "blue" : state.phase === "diff" ? "warn" : "good"} /><div className="secondary-bench-grid"><div className="bench-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Spatial memory</span><h2>Observed surface</h2></div><button className="ghost-button" onClick={() => dispatch({ type: "SCAN" })}><Icon name="scan" size={15} /> Scan again</button></div><MiniBenchMap phase={state.phase} empty={project?.entities === 0} /></div><div className="entity-list-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Tracked entities</span><h2>{project?.entities === 0 ? "No anchors yet" : "7 anchors"}</h2></div><StatusBadge tone={project?.entities === 0 ? "blue" : "good"} icon={false}>{project?.entities === 0 ? "ready" : "live"}</StatusBadge></div><div className="tracked-list">{project?.entities === 0 ? <div className="empty-evidence"><span className="empty-evidence-icon"><Icon name="camera" size={16} /></span><strong>Waiting for the first observation.</strong><small>Capture evidence to create the first spatial anchors.</small></div> : <><TrackedEntity label="A17" detail={state.phase === "diff" || state.phase === "overdue" ? "requires evidence" : "washed · rack 4"} tone={state.phase === "diff" || state.phase === "overdue" ? "coral" : "lime"} /><TrackedEntity label="B02" detail={state.phase === "corrected" ? "centrifuging" : "prepared · rack 7"} tone="coral" /><TrackedEntity label="PX-9" detail="40% remaining" tone="blue" /><TrackedEntity label="C-01" detail={state.phase === "diff" || state.phase === "confirmed" ? "running" : "idle"} tone={state.phase === "diff" || state.phase === "confirmed" ? "lime" : "yellow"} /></>}</div><div className="secondary-note"><Icon name="clock" size={14} /><span>Next expected <strong>{project?.entities === 0 ? "first observation" : "A17 → centrifuge"}</strong><small>{project?.entities === 0 ? "not scheduled yet" : "in 20 minutes"}</small></span></div></div></div><div className="secondary-bottom"><RevisionTimeline state={state} project={project} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
   if (view === "Revisions") return <div className="secondary-page"><SecondaryHero eyebrow="IMMUTABLE WORLD LOG" title="Every correction leaves a trail." body="Beliefs can be superseded, but never silently erased. Revisions keep the operator, evidence, and downstream repairs visible." status="18 revisions" tone="blue" /><div className="revision-page-grid"><div className="revision-index-card"><div className="revision-index-top"><span className="panel-kicker">Current head</span><span className="revision-hash">8f4d…c12</span></div><strong>18</strong><span>world revision</span><div className="revision-stack"><RevisionStackRow number="18" label="B02 → centrifuge" tone="lime" active /><RevisionStackRow number="17" label="A17 → washed" tone="blue" /><RevisionStackRow number="16" label="Experiment 28 opened" tone="cream" /></div></div><div className="revision-detail-card"><div className="secondary-card-heading"><div><span className="panel-kicker">Revision #18</span><h2>Dependent assumptions repaired</h2></div><StatusBadge tone="blue" icon={false}>human authored</StatusBadge></div><p className="revision-lede">A correction does not overwrite the old claim. It tells the world model what to restore, what to move, and which evidence made the difference.</p><div className="revision-diff"><DiffRow marker="−" label="A17" from="centrifuging" to="timer restored" tone="blue" /><DiffRow marker="+" label="B02" from="rack 7" to="centrifuging" tone="coral" /><DiffRow marker="~" label="Experiment 28" from="blocked" to="reconciled" tone="lime" /></div><div className="revision-footer"><span><Icon name="check" size={14} />3 dependent assumptions repaired</span><span>operator · just now</span></div></div></div><div className="secondary-bottom"><ActivityPanel state={state} /><button className="text-button back-link" onClick={() => onNavigate("Overview")}>← Back to overview</button></div></div>;
@@ -480,8 +501,9 @@ function SecondaryHero({ eyebrow, title, body, status, tone }) {
   return <section className="secondary-hero"><div><div className="eyebrow"><span className="eyebrow-line" />{eyebrow}</div><h1>{title}</h1><p>{body}</p></div><StatusBadge tone={tone}>{status}</StatusBadge></section>;
 }
 
-function MiniBenchMap({ phase, empty = false }) {
+function MiniBenchMap({ phase, empty = false, claim = null }) {
   if (empty) return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-empty"><Icon name="camera" size={17} /><strong>No spatial anchors yet</strong><small>Capture evidence to place the first claim.</small></div><span className="mini-map-caption">waiting for first observation</span></div>;
+  if (claim) return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-live-claim"><span className="live-observation-pulse" /><strong>{claim.entity_id || "Observation"}</strong><small>{claim.observed_state || "claim captured"}</small><em>evidence-backed</em></div><span className="mini-map-caption">latest observation · claim ready for review</span></div>;
   const centrifugeLabel = ["diff", "confirmed"].includes(phase) ? "running" : "idle";
   return <div className="mini-bench-map"><div className="mini-map-grid" /><div className="mini-map-origin">O4</div><div className="mini-map-node mini-node-a"><b>A17</b><span>{phase === "diff" || phase === "overdue" ? "missing" : "washed"}</span></div><div className="mini-map-node mini-node-b"><b>B02</b><span>{phase === "corrected" ? "spinning" : "rack 7"}</span></div><div className="mini-map-node mini-node-c"><b>C-01</b><span>{centrifugeLabel}</span></div><div className="mini-map-node mini-node-p"><b>PX-9</b><span>40%</span></div><svg viewBox="0 0 700 230" preserveAspectRatio="none" aria-hidden="true"><path d="M90 119 C185 109 246 66 345 78 S482 70 595 45" /><path d="M90 119 C188 145 238 183 350 154 S478 166 602 191" /></svg><span className="mini-map-caption">camera anchor map · confidence 0.96</span></div>;
 }
@@ -502,12 +524,17 @@ function AutomationLogRow({ time, title, detail, alert }) {
   return <div className={`automation-log-row ${alert ? "log-alert" : ""}`}><span className="automation-time">{time}</span><span className="automation-log-dot" /><span><strong>{title}</strong><small>{detail}</small></span></div>;
 }
 
-function getDiffRows(phase) {
+function getDiffRows(phase, claim) {
   const rows = {
     new: [
       { marker: "·", label: "Project memory", from: "empty", to: "waiting for evidence", tone: "neutral" },
       { marker: "·", label: "Expected state", from: "not defined", to: "created after capture", tone: "neutral" },
       { marker: "·", label: "Evidence graph", from: "0 claims", to: "ready to receive", tone: "neutral" },
+    ],
+    captured: [
+      { marker: "+", label: claim?.entity_id || "Observation", from: "not observed", to: claim?.observed_state || "claim captured", tone: "blue" },
+      { marker: "+", label: "Evidence", from: "not attached", to: "linked to project", tone: "lime" },
+      { marker: "?", label: "Next state", from: "not defined", to: claim?.next_expected_state || "awaiting review", tone: "yellow" },
     ],
     baseline: [
       { marker: "~", label: "Sample A17", from: "prepared", to: "washed · ready", tone: "neutral" },
@@ -544,20 +571,33 @@ function EntityMarker({ entity, phase }) {
   return <div className={`entity-marker ${entity.position} marker-${entity.tone} ${isAttention ? "marker-attention" : ""}`}><div className="entity-pin">{icon}</div><div className="entity-text"><strong>{entity.id}</strong><span>{entity.detail}</span></div>{isAttention && <span className="marker-alert"><Icon name="alert" size={11} /></span>}</div>;
 }
 
-function AgentQueue({ state, project, dispatch, onOpenEvidence }) {
-  const isNewProject = project?.entities === 0;
+function LiveObservationMarker({ claim }) {
+  const label = claim?.entity_id || "Observation";
+  const detail = claim?.observed_state || "claim captured";
+  return <div className="live-observation-marker"><span className="live-observation-pulse" /><div><strong>{label}</strong><small>{detail}</small></div><span className="live-observation-tag">new claim</span></div>;
+}
+
+function AgentQueue({ state, project, mode, dispatch, onOpenEvidence }) {
+  const isLive = mode === "actual";
+  const isNewProject = isLive ? !state.evidence.some((item) => item.projectId === project?.id) : project?.entities === 0;
   const isPending = state.phase === "diff";
   const isOverdue = state.phase === "overdue";
   const isCorrected = state.phase === "corrected";
   const isConfirmed = state.phase === "confirmed";
+  const newProjectContent = <>
+    <div className="queue-new-project"><div className="new-project-illustration"><Icon name="camera" size={17} /></div><div><strong>No world state yet</strong><p>Start this project with a photo or operator note. The agent will create the first dated claim here.</p></div></div>
+    <div className="queue-revision queue-new-revision"><span>PROJECT MEMORY</span><strong>WAITING FOR EVIDENCE</strong><small>nothing is assumed before the first capture</small></div>
+    <button className="primary-button full-button" onClick={onOpenEvidence}><Icon name="camera" size={15} /> Start first capture <Icon name="arrow" size={15} /></button>
+  </>;
+  const liveObservationContent = <>
+    <div className="queue-success"><div className="success-icon"><Icon name="check" size={16} /></div><div><strong>Observation captured</strong><p>{state.latestClaim?.entity_id ? `${state.latestClaim.entity_id} is ${state.latestClaim.observed_state || "now represented in the project graph"}.` : "Your evidence is attached to this project and ready for review."}</p></div></div>
+    <div className="queue-revision queue-confirmed"><span>NEW CLAIM</span><strong>{state.latestClaim?.entity_id || "OBSERVATION"} · READY FOR REVIEW</strong><small>{state.latestClaim?.confidence ? `confidence ${state.latestClaim.confidence}` : "source attached · awaiting claim details"}</small></div>
+    <button className="primary-button full-button" onClick={onOpenEvidence}><Icon name="camera" size={15} /> Capture next state <Icon name="arrow" size={15} /></button>
+  </>;
   return <div className={`queue-card panel-card ${isPending || isOverdue ? "queue-attention" : ""}`}>
-    <div className="queue-top"><div className="agent-avatar"><span>✦</span></div><div><div className="panel-kicker">Agent queue</div><h2>{isNewProject ? "Ready for first observation" : isOverdue ? "Follow-up required" : isPending ? "One thing needs you" : isConfirmed ? "A17 confirmed" : "All caught up"}</h2></div><StatusBadge tone={isPending || isOverdue ? "warn" : isNewProject ? "blue" : "good"} icon={false}>{isNewProject ? "ready" : isOverdue ? "overdue" : isPending ? "pending" : isConfirmed ? "sealed" : "synced"}</StatusBadge></div>
+    <div className="queue-top"><div className="agent-avatar"><span>✦</span></div><div><div className="panel-kicker">Agent queue</div><h2>{isLive ? (isNewProject ? "Ready for first observation" : "Observation captured") : isNewProject ? "Ready for first observation" : isOverdue ? "Follow-up required" : isPending ? "One thing needs you" : isConfirmed ? "A17 confirmed" : "All caught up"}</h2></div><StatusBadge tone={isLive ? (isNewProject ? "blue" : "good") : isPending || isOverdue ? "warn" : isNewProject ? "blue" : "good"} icon={false}>{isLive ? (isNewProject ? "ready" : "review") : isNewProject ? "ready" : isOverdue ? "overdue" : isPending ? "pending" : isConfirmed ? "sealed" : "synced"}</StatusBadge></div>
     <div className="queue-divider" />
-    {isNewProject ? <>
-      <div className="queue-new-project"><div className="new-project-illustration"><Icon name="camera" size={17} /></div><div><strong>No world state yet</strong><p>Start this project with a photo or operator note. The agent will create the first dated claim here.</p></div></div>
-      <div className="queue-revision queue-new-revision"><span>PROJECT MEMORY</span><strong>WAITING FOR EVIDENCE</strong><small>nothing is assumed before the first capture</small></div>
-      <button className="primary-button full-button" onClick={onOpenEvidence}><Icon name="camera" size={15} /> Start first capture <Icon name="arrow" size={15} /></button>
-    </> : isPending ? <>
+    {isLive ? (isNewProject ? newProjectContent : liveObservationContent) : isNewProject ? newProjectContent : isPending ? <>
       <div className="queue-question"><span className="question-mark">?</span><div><strong>Where did A17 go?</strong><p>It disappeared from rack 4 while C-01 started running. Timing suggests a transition, but the record needs a human anchor.</p></div></div>
       <div className="queue-evidence"><div className="evidence-head"><span>LIKELY TRANSITION</span><strong>0.71 confidence</strong></div><div className="evidence-flow"><span>A17 · washed</span><Icon name="arrow" size={14} /><span className="evidence-highlight">centrifuging?</span></div><div className="evidence-tags"><span>visual match</span><span>timer constraint</span><span>machine state</span></div></div>
       <div className="queue-actions"><button className="primary-button" onClick={() => dispatch({ type: "CONFIRM_A17" })}>Confirm A17 <Icon name="arrow" size={15} /></button><button className="secondary-button" onClick={() => dispatch({ type: "CORRECT_TO_B02" })}>It’s B02</button></div>
@@ -585,8 +625,10 @@ function DiffRow({ marker, label, from, to, tone }) {
   return <div className="diff-row"><span className={`diff-marker diff-marker-${tone}`}>{marker}</span><span className="diff-entity">{label}</span><span className="diff-from">{from}</span><Icon name="arrow" size={14} /><span className={`diff-to diff-to-${tone}`}>{to}</span></div>;
 }
 
-function RevisionTimeline({ state, project }) {
-  const isNewProject = project?.entities === 0;
+function RevisionTimeline({ state, project, mode }) {
+  const isLive = mode === "actual";
+  const hasEvidence = state.evidence.some((item) => item.projectId === project?.id);
+  const isNewProject = isLive ? !hasEvidence : project?.entities === 0;
   const phaseEvent = {
     baseline: { time: "14:51", title: "Expected · centrifuge", kind: "next" },
     diff: { time: "14:53", title: "Bench rescan", kind: "active" },
@@ -606,21 +648,32 @@ function RevisionTimeline({ state, project }) {
     { time: "—", title: "Add first evidence", kind: "next" },
     { time: "—", title: "Agent reconciliation", kind: "future" },
     { time: "—", title: "Expected follow-up", kind: "future" },
+  ] : isLive ? [
+    { time: "now", title: "Observation captured", kind: "done" },
+    { time: "—", title: "Claim review", kind: "active" },
+    { time: "—", title: "Human anchor", kind: "next" },
+    { time: "—", title: "Expected follow-up", kind: "future" },
   ] : [
     { time: "14:22", title: "Experiment 28 opened", kind: "done" },
     { time: "14:31", title: "A17 washed", kind: "done" },
     phaseEvent,
     finalEvent,
   ];
-  return <div className="timeline-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Procedural memory</div><h2>Expected sequence</h2></div><button className="icon-button icon-button-light"><Icon name="more" size={16} /></button></div><div className="timeline-line"><span className="timeline-progress" style={{ width: isNewProject ? "12%" : state.phase === "baseline" ? "47%" : state.phase === "corrected" ? "86%" : "69%" }} /></div><div className="timeline-events">{events.map((event) => <div className={`timeline-event event-${event.kind}`} key={`${event.time}-${event.title}`}><span className="event-time">{event.time}</span><span className="event-dot" /><strong>{event.title}</strong></div>)}</div><div className="timeline-caption"><span><Icon name="spark" size={13} />state machine · {project?.name ?? "Experiment 28"}</span><span>{isNewProject ? "awaiting first claim" : "+ 4 dependent steps"}</span></div></div>;
+  return <div className="timeline-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Procedural memory</div><h2>Expected sequence</h2></div><button className="icon-button icon-button-light"><Icon name="more" size={16} /></button></div><div className="timeline-line"><span className="timeline-progress" style={{ width: isNewProject ? "12%" : isLive ? "35%" : state.phase === "baseline" ? "47%" : state.phase === "corrected" ? "86%" : "69%" }} /></div><div className="timeline-events">{events.map((event) => <div className={`timeline-event event-${event.kind}`} key={`${event.time}-${event.title}`}><span className="event-time">{event.time}</span><span className="event-dot" /><strong>{event.title}</strong></div>)}</div><div className="timeline-caption"><span><Icon name="spark" size={13} />{isLive ? "project graph" : "state machine"} · {project?.name ?? "Experiment 28"}</span><span>{isNewProject ? "awaiting first claim" : isLive ? "awaiting human anchor" : "+ 4 dependent steps"}</span></div></div>;
 }
 
-function ActivityPanel({ state, project }) {
-  const isNewProject = project?.entities === 0;
+function ActivityPanel({ state, project, mode }) {
+  const isLive = mode === "actual";
+  const hasEvidence = state.evidence.some((item) => item.projectId === project?.id);
+  const isNewProject = isLive ? !hasEvidence : project?.entities === 0;
   const rows = isNewProject ? [
     ["now", "Project created", "good"],
     ["—", "Awaiting first evidence", "blue"],
     ["—", "No claims written yet", "cream"],
+  ] : isLive ? [
+    ["now", "Observation claim appended", "good"],
+    ["now", "Evidence linked to project", "blue"],
+    ["—", "Awaiting human review", "cream"],
   ] : state.phase === "baseline" ? [
     ["14:31", "Snapshot #17 committed", "good"],
     ["14:29", "A17 state → WASHED", "blue"],
@@ -638,7 +691,7 @@ function ActivityPanel({ state, project }) {
     ["14:53", "Semantic diff reconciled", "blue"],
     ["14:31", "A17 state → WASHED", "cream"],
   ];
-  return <div className="activity-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Immutable log</div><h2>Recent activity</h2></div><button className="text-button">View all <Icon name="arrow" size={14} /></button></div><div className="activity-list">{rows.map(([time, title, tone]) => <div className="activity-row" key={`${time}-${title}`}><span className={`activity-dot activity-dot-${tone}`} /><span className="activity-time">{time}</span><span className="activity-title">{title}</span><Icon name="chevron" size={14} /></div>)}</div><div className="activity-footer"><span><Icon name="database" size={13} /> Firestore · append-only</span><span>hash 8f4d…c12</span></div></div>;
+  return <div className="activity-card panel-card"><div className="panel-heading compact-heading"><div><div className="panel-kicker">Immutable log</div><h2>Recent activity</h2></div><button className="text-button">View all <Icon name="arrow" size={14} /></button></div><div className="activity-list">{rows.map(([time, title, tone]) => <div className="activity-row" key={`${time}-${title}`}><span className={`activity-dot activity-dot-${tone}`} /><span className="activity-time">{time}</span><span className="activity-title">{title}</span><Icon name="chevron" size={14} /></div>)}</div><div className="activity-footer"><span><Icon name="database" size={13} /> {isLive ? "Project log · append-only" : "Firestore · append-only"}</span><span>{isLive ? "claim pending review" : "hash 8f4d…c12"}</span></div></div>;
 }
 
 export default App;
