@@ -20,8 +20,8 @@ A typed claim and its provenance out.
 
 5
 00:00:19,250 --> 00:00:23,750
-Demo replay is isolated for evaluation.
-It never pollutes live project state.
+Demo replay states the mission clearly: observe, clarify, correct, then wake.
+It is isolated from live project state.
 
 6
 00:00:24,250 --> 00:00:29,750

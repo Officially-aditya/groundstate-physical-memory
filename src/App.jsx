@@ -312,8 +312,9 @@ function App() {
 
         <div className="content-wrap">
           <ProjectRepositoryBar project={activeProject} state={state} mode={mode} activeNav={activeNav} onNavigate={setActiveNav} onCapture={() => setCaptureOpen(true)} onModeChange={switchMode} />
+          {mode === "demo" && activeNav === "Overview" && <DemoMission phase={state.phase} onScan={() => dispatch({ type: "SCAN" })} onNavigate={setActiveNav} />}
           {activeNav === "Overview" && <>
-            <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} mode={mode} hasEvidence={hasEvidence} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
+            <WorkflowHeader project={activeProject} phase={state.phase} copy={copy} mode={mode} hasEvidence={hasEvidence} onCapture={() => setCaptureOpen(true)} />
             <WorkflowPrompt phase={state.phase} mode={mode} hasEvidence={hasEvidence} onCapture={() => setCaptureOpen(true)} onScan={() => dispatch({ type: "SCAN" })} />
           <section className="hero-section">
             <div className="hero-copy">
@@ -402,7 +403,20 @@ function ProjectRepositoryBar({ project, state, mode, activeNav, onNavigate, onC
   return <section className="repository-bar"><div className="repository-bar-main"><div className="repository-identity"><span className="repository-mark">gs</span><div><div className="repository-path">{mode === "demo" ? "demo / groundstate" : "physical memory / groundstate"}</div><h2>{project?.name}</h2><div className="repository-meta"><span>{project?.location}</span><span className="repository-pill">{mode === "demo" ? "fixture" : "state graph"}</span><span className="repository-sync"><i />{mode === "demo" ? "deterministic replay" : state.phase === "diff" ? "review required" : project?.entities ? "synced" : "ready for evidence"}</span></div></div></div><div className="repository-actions"><div className="mode-toggle" role="tablist" aria-label="Product mode"><button className={mode === "actual" ? "mode-active" : ""} onClick={() => onModeChange("actual")} role="tab" aria-selected={mode === "actual"}><Icon name="folder" size={12} /> Workspace</button><button className={mode === "demo" ? "mode-active" : ""} onClick={() => onModeChange("demo")} role="tab" aria-selected={mode === "demo"}><Icon name="spark" size={12} /> Demo replay</button></div><button className="repo-ghost-button" onClick={() => onNavigate("Projects")}><Icon name="folder" size={14} /> Projects</button><button className="repo-primary-button" onClick={onCapture}><Icon name="camera" size={14} /> Capture evidence</button></div></div><nav className="repository-tabs" aria-label="Project sections">{tabs.map(([label, nav, count]) => <button key={label} className={activeTab === label ? "repository-tab-active" : ""} onClick={() => onNavigate(nav)}>{label}{count && <span>{count}</span>}</button>)}</nav></section>;
 }
 
-function WorkflowHeader({ project, phase, copy, mode, hasEvidence, onCapture, onScan }) {
+function DemoMission({ phase, onScan, onNavigate }) {
+  const missions = {
+    baseline: { eyebrow: "DEMO OBJECTIVE · EXPERIMENT 28", title: "Watch one lab sample move from observation to correction.", body: "Groundstate turns a bench photo and operator note into a versioned physical state, pauses when evidence conflicts, then keeps the next action alive.", action: "Run the first scan", run: onScan, active: 0 },
+    diff: { eyebrow: "STEP 2 · HUMAN ANCHOR", title: "Decide what actually moved.", body: "The second scan conflicts with the remembered bench. Groundstate pauses the update instead of guessing; your answer becomes the anchor.", action: "Review the agent queue", run: () => document.querySelector(".queue-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), active: 1 },
+    confirmed: { eyebrow: "STEP 3 · STATE SEALED", title: "Keep the physical record honest.", body: "Your confirmation links the evidence and timing constraint. The world model can move forward without silently rewriting history.", action: "Open the world log", run: () => onNavigate("Revisions"), active: 2 },
+    corrected: { eyebrow: "STEP 3 · CORRECTION PROPAGATED", title: "Watch the correction travel.", body: "Choose the right sample and Groundstate keeps the old belief in history while repairing the dependent physical assumptions.", action: "Open the world log", run: () => onNavigate("Revisions"), active: 2 },
+    overdue: { eyebrow: "STEP 4 · AUTONOMOUS FOLLOW-UP", title: "See what happens when the world falls behind.", body: "Fast-forward the clock to let the agent reopen the exact expected transition instead of losing the task in a generic inbox.", action: "Open automations", run: () => onNavigate("Automations"), active: 3 },
+  }[phase] ?? null;
+  if (!missions) return null;
+  const stages = [["01", "Observe"], ["02", "Clarify"], ["03", "Correct"], ["04", "Wake"]];
+  return <section className="demo-mission-banner"><div className="demo-mission-copy"><div className="demo-mission-eyebrow"><span className="eyebrow-line" />{missions.eyebrow}</div><h2>{missions.title}</h2><p>{missions.body}</p></div><div className="demo-mission-rail"><div className="demo-mission-rail-label">THE REPLAY PROVES</div><div className="demo-mission-stages">{stages.map(([number, label], index) => <div className={`demo-mission-stage ${index === missions.active ? "mission-stage-active" : ""} ${index < missions.active ? "mission-stage-done" : ""}`} key={label}><span>{index < missions.active ? "✓" : number}</span><strong>{label}</strong>{index < stages.length - 1 && <i />}</div>)}</div><button className="demo-mission-action" onClick={missions.run}>{missions.action}<Icon name="arrow" size={14} /></button></div></section>;
+}
+
+function WorkflowHeader({ project, phase, copy, mode, hasEvidence, onCapture }) {
   const liveCaptured = mode === "actual" && hasEvidence;
   const currentStep = liveCaptured ? 2 : ({ baseline: 1, diff: 2, confirmed: 3, corrected: 3, overdue: 4 }[phase] ?? 1);
   const stateLabel = liveCaptured ? "claim ready for review" : phase === "baseline" ? "ready for evidence" : phase === "diff" ? "needs your decision" : phase === "overdue" ? "follow-up overdue" : "state reconciled";
@@ -411,7 +425,7 @@ function WorkflowHeader({ project, phase, copy, mode, hasEvidence, onCapture, on
       <div className="workflow-title-meta"><span className="eyebrow"><span className="eyebrow-line" />PHYSICAL MEMORY / {project.name}</span><StatusBadge tone={phase === "diff" || phase === "overdue" ? "warn" : "good"}>{stateLabel}</StatusBadge></div>
       <h1>{liveCaptured ? "A claim is ready to inspect." : phase === "baseline" ? "Make the next state visible." : copy.title}</h1>
       <p>Groundstate turns camera frames and operator notes into an evidence-backed physical state you can inspect, correct, and hand back to an agent.</p>
-      <div className="workflow-header-actions"><button className="primary-button" onClick={onCapture}><Icon name="camera" size={16} /> Capture evidence <Icon name="arrow" size={15} /></button>{mode === "demo" && <button className="secondary-button" onClick={onScan}><Icon name="scan" size={15} /> Replay sample scan</button>}</div>
+      <div className="workflow-header-actions"><button className="primary-button" onClick={onCapture}><Icon name="camera" size={16} /> Capture evidence <Icon name="arrow" size={15} /></button></div>
     </div>
     <div className="workflow-state-card"><div className="panel-kicker">CURRENT WORKFLOW</div><strong>{liveCaptured ? "Review the grounded claim" : currentStep === 1 ? "Start with one observation" : currentStep === 2 ? "Review the contradiction" : currentStep === 3 ? "Seal the corrected state" : "Check the overdue transition"}</strong><p>{liveCaptured ? "The evidence is attached to this project. Confirm what should happen next before scheduling follow-up." : currentStep === 1 ? "A photo or operator note becomes the first claim in this project." : "The agent keeps its uncertainty visible until you choose what is true."}</p><span className="workflow-state-line"><i style={{ width: `${currentStep * 25}%` }} /></span><small>step {String(currentStep).padStart(2, "0")} / 04</small></div>
     <WorkflowStepper currentStep={currentStep} />
