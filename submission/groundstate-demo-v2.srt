@@ -1,0 +1,43 @@
+1
+00:00:00,300 --> 00:00:03,700
+Groundstate is Git for the Physical World.
+Versioned state, backed by evidence.
+
+2
+00:00:04,250 --> 00:00:08,750
+The live product starts clean.
+Capture one observation for a project.
+
+3
+00:00:09,250 --> 00:00:13,750
+Projects keep physical contexts separate.
+Evidence and next actions stay together.
+
+4
+00:00:14,250 --> 00:00:18,750
+Photo or operator note in.
+A typed claim and its provenance out.
+
+5
+00:00:19,250 --> 00:00:23,750
+Demo replay is isolated for evaluation.
+It never pollutes live project state.
+
+6
+00:00:24,250 --> 00:00:29,750
+The semantic diff shows what changed.
+Ambiguity becomes a human decision.
+
+7
+00:00:30,250 --> 00:00:35,750
+Corrections travel through dependent assumptions.
+History stays inspectable.
+
+8
+00:00:36,250 --> 00:00:41,750
+Expected transitions can wake the agent.
+Gemini + Firestore + Pub/Sub keep continuity.
+
+9
+00:00:42,250 --> 00:00:45,750
+Groundstate remembers how reality changed.
